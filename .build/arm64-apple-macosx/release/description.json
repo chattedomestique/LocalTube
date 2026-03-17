@@ -1,0 +1,1115 @@
+{
+  "builtTestProducts" : [
+
+  ],
+  "copyCommands" : {
+    "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube_LocalTube.bundle/Resources" : {
+      "inputs" : [
+        {
+          "kind" : "directory",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Resources"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "directory",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube_LocalTube.bundle/Resources"
+        }
+      ]
+    }
+  },
+  "explicitTargetDependencyImportCheckingMode" : {
+    "none" : {
+
+    }
+  },
+  "generatedSourceTargetSet" : [
+
+  ],
+  "pluginDescriptions" : [
+
+  ],
+  "swiftCommands" : {
+    "C.LocalTube-arm64-apple-macosx15.0-release.module" : {
+      "executable" : "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc",
+      "fileList" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/sources",
+      "importPath" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/Modules",
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/App/AppDelegate.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/App/LocalTubeApp.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Database/DatabaseMigrations.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Database/DatabaseService.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Models/AppSettings.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Models/Channel.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Models/DownloadQueueItem.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Models/Video.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Player/PlayerState.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Player/VideoPlayerView.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Services/ChannelResolverService.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Services/DependencyService.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Services/DownloadService.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Services/PINService.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Services/SettingsService.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Services/ShellRunner.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Services/SingleInstanceGuard.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Services/ThumbnailService.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/State/AppState.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Utilities/AccessibilityHelpers.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Utilities/AppLogger.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Utilities/AppSupportDirectory.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Utilities/StringExtensions.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/ContentRootView.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Editor/AddVideosView.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Editor/AutoLockTimerView.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Editor/DownloadQueuePanel.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Editor/EditorChannelDetailView.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Editor/EditorRootView.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Editor/NewChannelFlow.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Onboarding/DependencyCheckView.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Onboarding/DownloadFolderOnboardingView.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Onboarding/PINSetupView.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Settings/SettingsView.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Shared/ChannelCard.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Shared/DownloadStateBadge.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Shared/MouseTrackingView.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Shared/NumpadView.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Shared/PINEntryOverlay.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Shared/PINRecoveryView.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Shared/TenFootStyles.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Shared/VideoCard.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Viewer/ViewerChannelView.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Viewer/ViewerLibraryView.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Viewer/ViewerRootView.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/DerivedSources/resource_bundle_accessor.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/swift-version--58304C5D6DBC2206.txt"
+        },
+        {
+          "kind" : "virtual",
+          "name" : "<LocalTube-arm64-apple-macosx15.0-release.module-resources>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/sources"
+        }
+      ],
+      "isLibrary" : false,
+      "moduleName" : "LocalTube",
+      "moduleOutputPath" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/Modules/LocalTube.swiftmodule",
+      "objects" : [
+        "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/AppDelegate.swift.o",
+        "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/LocalTubeApp.swift.o",
+        "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/DatabaseMigrations.swift.o",
+        "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/DatabaseService.swift.o",
+        "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/AppSettings.swift.o",
+        "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/Channel.swift.o",
+        "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/DownloadQueueItem.swift.o",
+        "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/Video.swift.o",
+        "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/PlayerState.swift.o",
+        "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/VideoPlayerView.swift.o",
+        "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/ChannelResolverService.swift.o",
+        "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/DependencyService.swift.o",
+        "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/DownloadService.swift.o",
+        "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/PINService.swift.o",
+        "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/SettingsService.swift.o",
+        "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/ShellRunner.swift.o",
+        "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/SingleInstanceGuard.swift.o",
+        "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/ThumbnailService.swift.o",
+        "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/AppState.swift.o",
+        "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/AccessibilityHelpers.swift.o",
+        "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/AppLogger.swift.o",
+        "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/AppSupportDirectory.swift.o",
+        "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/StringExtensions.swift.o",
+        "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/ContentRootView.swift.o",
+        "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/AddVideosView.swift.o",
+        "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/AutoLockTimerView.swift.o",
+        "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/DownloadQueuePanel.swift.o",
+        "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/EditorChannelDetailView.swift.o",
+        "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/EditorRootView.swift.o",
+        "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/NewChannelFlow.swift.o",
+        "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/DependencyCheckView.swift.o",
+        "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/DownloadFolderOnboardingView.swift.o",
+        "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/PINSetupView.swift.o",
+        "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/SettingsView.swift.o",
+        "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/ChannelCard.swift.o",
+        "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/DownloadStateBadge.swift.o",
+        "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/MouseTrackingView.swift.o",
+        "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/NumpadView.swift.o",
+        "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/PINEntryOverlay.swift.o",
+        "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/PINRecoveryView.swift.o",
+        "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/TenFootStyles.swift.o",
+        "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/VideoCard.swift.o",
+        "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/ViewerChannelView.swift.o",
+        "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/ViewerLibraryView.swift.o",
+        "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/ViewerRootView.swift.o",
+        "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/resource_bundle_accessor.swift.o"
+      ],
+      "otherArguments" : [
+        "-target",
+        "arm64-apple-macosx14.0",
+        "-whole-module-optimization",
+        "-num-threads",
+        "10",
+        "-serialize-diagnostics",
+        "-O",
+        "-j10",
+        "-DSWIFT_PACKAGE",
+        "-DSWIFT_MODULE_RESOURCE_BUNDLE_AVAILABLE",
+        "-module-cache-path",
+        "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/ModuleCache",
+        "-parseable-output",
+        "-Xfrontend",
+        "-entry-point-function-name",
+        "-Xfrontend",
+        "LocalTube_main",
+        "-swift-version",
+        "5",
+        "-plugin-path",
+        "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing",
+        "-sdk",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.0.sdk",
+        "-F",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+        "-F",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks",
+        "-I",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+        "-L",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+        "-g",
+        "-Xcc",
+        "-isysroot",
+        "-Xcc",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.0.sdk",
+        "-Xcc",
+        "-F",
+        "-Xcc",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+        "-Xcc",
+        "-F",
+        "-Xcc",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks",
+        "-Xcc",
+        "-fPIC",
+        "-Xcc",
+        "-g",
+        "-package-name",
+        "localtube"
+      ],
+      "outputFileMapPath" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/output-file-map.json",
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/AppDelegate.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/LocalTubeApp.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/DatabaseMigrations.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/DatabaseService.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/AppSettings.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/Channel.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/DownloadQueueItem.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/Video.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/PlayerState.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/VideoPlayerView.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/ChannelResolverService.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/DependencyService.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/DownloadService.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/PINService.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/SettingsService.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/ShellRunner.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/SingleInstanceGuard.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/ThumbnailService.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/AppState.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/AccessibilityHelpers.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/AppLogger.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/AppSupportDirectory.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/StringExtensions.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/ContentRootView.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/AddVideosView.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/AutoLockTimerView.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/DownloadQueuePanel.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/EditorChannelDetailView.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/EditorRootView.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/NewChannelFlow.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/DependencyCheckView.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/DownloadFolderOnboardingView.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/PINSetupView.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/SettingsView.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/ChannelCard.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/DownloadStateBadge.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/MouseTrackingView.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/NumpadView.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/PINEntryOverlay.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/PINRecoveryView.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/TenFootStyles.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/VideoCard.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/ViewerChannelView.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/ViewerLibraryView.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/ViewerRootView.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/resource_bundle_accessor.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/Modules/LocalTube.swiftmodule"
+        }
+      ],
+      "prepareForIndexing" : false,
+      "sources" : [
+        "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/App/AppDelegate.swift",
+        "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/App/LocalTubeApp.swift",
+        "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Database/DatabaseMigrations.swift",
+        "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Database/DatabaseService.swift",
+        "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Models/AppSettings.swift",
+        "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Models/Channel.swift",
+        "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Models/DownloadQueueItem.swift",
+        "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Models/Video.swift",
+        "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Player/PlayerState.swift",
+        "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Player/VideoPlayerView.swift",
+        "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Services/ChannelResolverService.swift",
+        "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Services/DependencyService.swift",
+        "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Services/DownloadService.swift",
+        "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Services/PINService.swift",
+        "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Services/SettingsService.swift",
+        "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Services/ShellRunner.swift",
+        "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Services/SingleInstanceGuard.swift",
+        "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Services/ThumbnailService.swift",
+        "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/State/AppState.swift",
+        "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Utilities/AccessibilityHelpers.swift",
+        "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Utilities/AppLogger.swift",
+        "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Utilities/AppSupportDirectory.swift",
+        "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Utilities/StringExtensions.swift",
+        "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/ContentRootView.swift",
+        "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Editor/AddVideosView.swift",
+        "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Editor/AutoLockTimerView.swift",
+        "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Editor/DownloadQueuePanel.swift",
+        "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Editor/EditorChannelDetailView.swift",
+        "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Editor/EditorRootView.swift",
+        "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Editor/NewChannelFlow.swift",
+        "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Onboarding/DependencyCheckView.swift",
+        "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Onboarding/DownloadFolderOnboardingView.swift",
+        "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Onboarding/PINSetupView.swift",
+        "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Settings/SettingsView.swift",
+        "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Shared/ChannelCard.swift",
+        "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Shared/DownloadStateBadge.swift",
+        "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Shared/MouseTrackingView.swift",
+        "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Shared/NumpadView.swift",
+        "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Shared/PINEntryOverlay.swift",
+        "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Shared/PINRecoveryView.swift",
+        "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Shared/TenFootStyles.swift",
+        "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Shared/VideoCard.swift",
+        "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Viewer/ViewerChannelView.swift",
+        "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Viewer/ViewerLibraryView.swift",
+        "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Viewer/ViewerRootView.swift",
+        "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/DerivedSources/resource_bundle_accessor.swift"
+      ],
+      "tempsPath" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build",
+      "wholeModuleOptimization" : true
+    }
+  },
+  "swiftFrontendCommands" : {
+
+  },
+  "swiftTargetScanArgs" : {
+    "LocalTube" : [
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc",
+      "-module-name",
+      "LocalTube",
+      "-package-name",
+      "localtube",
+      "-c",
+      "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/App/AppDelegate.swift",
+      "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/App/LocalTubeApp.swift",
+      "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Database/DatabaseMigrations.swift",
+      "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Database/DatabaseService.swift",
+      "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Models/AppSettings.swift",
+      "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Models/Channel.swift",
+      "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Models/DownloadQueueItem.swift",
+      "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Models/Video.swift",
+      "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Player/PlayerState.swift",
+      "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Player/VideoPlayerView.swift",
+      "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Services/ChannelResolverService.swift",
+      "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Services/DependencyService.swift",
+      "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Services/DownloadService.swift",
+      "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Services/PINService.swift",
+      "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Services/SettingsService.swift",
+      "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Services/ShellRunner.swift",
+      "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Services/SingleInstanceGuard.swift",
+      "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Services/ThumbnailService.swift",
+      "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/State/AppState.swift",
+      "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Utilities/AccessibilityHelpers.swift",
+      "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Utilities/AppLogger.swift",
+      "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Utilities/AppSupportDirectory.swift",
+      "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Utilities/StringExtensions.swift",
+      "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/ContentRootView.swift",
+      "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Editor/AddVideosView.swift",
+      "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Editor/AutoLockTimerView.swift",
+      "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Editor/DownloadQueuePanel.swift",
+      "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Editor/EditorChannelDetailView.swift",
+      "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Editor/EditorRootView.swift",
+      "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Editor/NewChannelFlow.swift",
+      "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Onboarding/DependencyCheckView.swift",
+      "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Onboarding/DownloadFolderOnboardingView.swift",
+      "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Onboarding/PINSetupView.swift",
+      "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Settings/SettingsView.swift",
+      "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Shared/ChannelCard.swift",
+      "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Shared/DownloadStateBadge.swift",
+      "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Shared/MouseTrackingView.swift",
+      "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Shared/NumpadView.swift",
+      "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Shared/PINEntryOverlay.swift",
+      "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Shared/PINRecoveryView.swift",
+      "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Shared/TenFootStyles.swift",
+      "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Shared/VideoCard.swift",
+      "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Viewer/ViewerChannelView.swift",
+      "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Viewer/ViewerLibraryView.swift",
+      "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Viewer/ViewerRootView.swift",
+      "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/DerivedSources/resource_bundle_accessor.swift",
+      "-I",
+      "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/Modules",
+      "-target",
+      "arm64-apple-macosx14.0",
+      "-whole-module-optimization",
+      "-num-threads",
+      "10",
+      "-serialize-diagnostics",
+      "-O",
+      "-j10",
+      "-DSWIFT_PACKAGE",
+      "-DSWIFT_MODULE_RESOURCE_BUNDLE_AVAILABLE",
+      "-module-cache-path",
+      "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/ModuleCache",
+      "-parseable-output",
+      "-Xfrontend",
+      "-entry-point-function-name",
+      "-Xfrontend",
+      "LocalTube_main",
+      "-swift-version",
+      "5",
+      "-plugin-path",
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing",
+      "-sdk",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.0.sdk",
+      "-F",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+      "-F",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks",
+      "-I",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+      "-L",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+      "-g",
+      "-Xcc",
+      "-isysroot",
+      "-Xcc",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.0.sdk",
+      "-Xcc",
+      "-F",
+      "-Xcc",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+      "-Xcc",
+      "-F",
+      "-Xcc",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks",
+      "-Xcc",
+      "-fPIC",
+      "-Xcc",
+      "-g",
+      "-package-name",
+      "localtube",
+      "-driver-use-frontend-path",
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc"
+    ]
+  },
+  "targetDependencyMap" : {
+    "LocalTube" : [
+
+    ]
+  },
+  "testDiscoveryCommands" : {
+
+  },
+  "testEntryPointCommands" : {
+
+  },
+  "traitConfiguration" : {
+    "default" : {
+
+    }
+  },
+  "writeCommands" : {
+    "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/sources" : {
+      "alwaysOutOfDate" : false,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<sources-file-list>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/App/AppDelegate.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/App/LocalTubeApp.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Database/DatabaseMigrations.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Database/DatabaseService.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Models/AppSettings.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Models/Channel.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Models/DownloadQueueItem.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Models/Video.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Player/PlayerState.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Player/VideoPlayerView.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Services/ChannelResolverService.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Services/DependencyService.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Services/DownloadService.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Services/PINService.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Services/SettingsService.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Services/ShellRunner.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Services/SingleInstanceGuard.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Services/ThumbnailService.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/State/AppState.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Utilities/AccessibilityHelpers.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Utilities/AppLogger.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Utilities/AppSupportDirectory.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Utilities/StringExtensions.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/ContentRootView.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Editor/AddVideosView.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Editor/AutoLockTimerView.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Editor/DownloadQueuePanel.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Editor/EditorChannelDetailView.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Editor/EditorRootView.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Editor/NewChannelFlow.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Onboarding/DependencyCheckView.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Onboarding/DownloadFolderOnboardingView.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Onboarding/PINSetupView.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Settings/SettingsView.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Shared/ChannelCard.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Shared/DownloadStateBadge.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Shared/MouseTrackingView.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Shared/NumpadView.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Shared/PINEntryOverlay.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Shared/PINRecoveryView.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Shared/TenFootStyles.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Shared/VideoCard.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Viewer/ViewerChannelView.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Viewer/ViewerLibraryView.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/Sources/LocalTube/Views/Viewer/ViewerRootView.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/DerivedSources/resource_bundle_accessor.swift"
+        }
+      ],
+      "outputFilePath" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/sources"
+    },
+    "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.product/Objects.LinkFileList" : {
+      "alwaysOutOfDate" : false,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<link-file-list>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/AccessibilityHelpers.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/AddVideosView.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/AppDelegate.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/AppLogger.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/AppSettings.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/AppState.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/AppSupportDirectory.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/AutoLockTimerView.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/Channel.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/ChannelCard.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/ChannelResolverService.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/ContentRootView.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/DatabaseMigrations.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/DatabaseService.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/DependencyCheckView.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/DependencyService.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/DownloadFolderOnboardingView.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/DownloadQueueItem.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/DownloadQueuePanel.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/DownloadService.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/DownloadStateBadge.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/EditorChannelDetailView.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/EditorRootView.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/LocalTubeApp.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/MouseTrackingView.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/NewChannelFlow.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/NumpadView.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/PINEntryOverlay.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/PINRecoveryView.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/PINService.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/PINSetupView.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/PlayerState.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/SettingsService.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/SettingsView.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/ShellRunner.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/SingleInstanceGuard.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/StringExtensions.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/TenFootStyles.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/ThumbnailService.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/Video.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/VideoCard.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/VideoPlayerView.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/ViewerChannelView.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/ViewerLibraryView.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/ViewerRootView.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.build/resource_bundle_accessor.swift.o"
+        }
+      ],
+      "outputFilePath" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/LocalTube.product/Objects.LinkFileList"
+    },
+    "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/swift-version--58304C5D6DBC2206.txt" : {
+      "alwaysOutOfDate" : true,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<swift-get-version>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc"
+        }
+      ],
+      "outputFilePath" : "/Users/jayemarievanyo/LocalTube/.build/arm64-apple-macosx/release/swift-version--58304C5D6DBC2206.txt"
+    }
+  }
+}

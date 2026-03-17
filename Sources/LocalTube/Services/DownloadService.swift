@@ -1,12 +1,23 @@
 import Foundation
 import Observation
 
+// MARK: - Download Event
+
+enum DownloadEvent: Sendable {
+    case progress(UUID, Double)
+    case completed(UUID)
+    case error(UUID, String)
+}
+
 // MARK: - Download Service
 
 @Observable
 @MainActor
 final class DownloadService {
     weak var appState: AppState?
+
+    /// Optional event hook — set by WebWindowController to forward events to the JS bridge.
+    var eventHandler: (@MainActor (DownloadEvent) -> Void)?
 
     private var isProcessing = false
 
@@ -117,6 +128,7 @@ final class DownloadService {
             try await DatabaseService.shared.updateVideo(updatedVideo)
             item.state = .completed
             AppLogger.info("Download completed: \(video.title)")
+            eventHandler?(.completed(video.id))
         } catch {
             item.state = .failed(error: error.localizedDescription)
             if var v = appState.videoById(item.videoId) {
@@ -126,6 +138,7 @@ final class DownloadService {
                 try? await DatabaseService.shared.updateVideo(v)
             }
             AppLogger.error("Download failed: \(video.title) — \(error.localizedDescription)")
+            eventHandler?(.error(video.id, error.localizedDescription))
         }
 
         await processNext()
@@ -195,6 +208,7 @@ final class DownloadService {
                             v.downloadProgress = p
                             self.appState?.updateVideo(v)
                         }
+                        self.eventHandler?(.progress(video.id, p))
                     }
                 }
             } onCompletion: { exitCode in

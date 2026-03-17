@@ -1,5 +1,4 @@
 import Foundation
-import SwiftUI
 import Observation
 
 // MARK: - App Mode
@@ -67,6 +66,11 @@ final class AppState {
 
     let dependencyService = DependencyService()
     var downloadService = DownloadService()
+
+    // MARK: - External hooks (set by WebWindowController)
+
+    /// Called every second while editor mode is active with remaining lock seconds.
+    var onEditorTimerTick: (@MainActor (Int) -> Void)?
 
     // MARK: - Init
 
@@ -263,6 +267,7 @@ final class AppState {
 
     func exitEditorMode() {
         appMode = .viewer
+        showPINEntry = false
         editorLockTimer?.invalidate()
         editorLockTimer = nil
         editorRemainingSeconds = 0
@@ -278,6 +283,7 @@ final class AppState {
             Task { @MainActor [weak self] in
                 guard let self = self else { return }
                 self.editorRemainingSeconds -= 1
+                self.onEditorTimerTick?(self.editorRemainingSeconds)
                 if self.editorRemainingSeconds <= 0 {
                     AppLogger.info("Editor Mode auto-locked due to inactivity")
                     self.exitEditorMode()

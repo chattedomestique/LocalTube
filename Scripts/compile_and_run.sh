@@ -25,6 +25,16 @@ security delete-generic-password -s "${BUNDLE_ID}" -a "recovery"  2>/dev/null ||
 security delete-generic-password -s "com.local.localtube" -a "pin"      2>/dev/null || true
 security delete-generic-password -s "com.local.localtube" -a "recovery"  2>/dev/null || true
 
+log "==> Building React WebUI"
+WEBUI_DIR="${ROOT_DIR}/WebUI"
+if [[ -d "${WEBUI_DIR}" ]]; then
+  cd "${WEBUI_DIR}"
+  npm run build 2>&1
+  cd "${ROOT_DIR}"
+else
+  log "WARN: WebUI directory not found at ${WEBUI_DIR} — skipping React build"
+fi
+
 log "==> Building and packaging ${APP_NAME}"
 APP_NAME="$APP_NAME" BUNDLE_ID="$BUNDLE_ID" SIGNING_MODE=adhoc \
   "${ROOT_DIR}/Scripts/package_app.sh" release

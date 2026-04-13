@@ -17,9 +17,10 @@ export default function Channel() {
     return saved ? Number(saved) : 24
   })
   const [currentPage, setCurrentPage] = useState(0)
+  const [searchQuery, setSearchQuery] = useState('')
 
-  // Reset to first page whenever the channel changes
-  useEffect(() => { setCurrentPage(0) }, [nav.channelId])
+  // Reset to first page whenever the channel changes or search changes
+  useEffect(() => { setCurrentPage(0) }, [nav.channelId, searchQuery])
 
   const channel = channels.find(c => c.id === nav.channelId)
   const channelVideos = (nav.channelId ? videos[nav.channelId] : []) ?? []
@@ -92,10 +93,17 @@ export default function Channel() {
     () => sortedVideos.filter(v => v.downloadState === 'ready').length,
     [sortedVideos]
   )
-  const totalPages = Math.ceil(sortedVideos.length / pageSize)
+
+  const filteredVideos = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase()
+    if (!q) return sortedVideos
+    return sortedVideos.filter(v => v.title.toLowerCase().includes(q))
+  }, [sortedVideos, searchQuery])
+
+  const totalPages = Math.ceil(filteredVideos.length / pageSize)
   const pagedVideos = useMemo(
-    () => sortedVideos.slice(currentPage * pageSize, (currentPage + 1) * pageSize),
-    [sortedVideos, currentPage, pageSize]
+    () => filteredVideos.slice(currentPage * pageSize, (currentPage + 1) * pageSize),
+    [filteredVideos, currentPage, pageSize]
   )
 
   // Pick a random thumbnail from this channel to use as the ambient background.
@@ -406,6 +414,75 @@ export default function Channel() {
         </div>
       </div>
 
+      {/* Search bar */}
+      {sortedVideos.length > 0 && (
+        <div style={{
+          position: 'relative',
+          zIndex: 1,
+          padding: '12px 44px',
+          flexShrink: 0,
+          background: 'rgba(13,13,15,0.55)',
+          backdropFilter: 'blur(16px)',
+          WebkitBackdropFilter: 'blur(16px)',
+          borderBottom: '0.5px solid rgba(255,255,255,0.07)',
+        }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            background: 'rgba(255,255,255,0.06)',
+            border: `0.5px solid ${searchQuery ? 'rgba(155,93,229,0.5)' : 'rgba(255,255,255,0.1)'}`,
+            borderRadius: 10,
+            padding: '8px 14px',
+            maxWidth: 480,
+            transition: 'border-color 150ms ease',
+          }}>
+            <svg width="15" height="15" viewBox="0 0 15 15" fill="none" style={{ flexShrink: 0, color: 'var(--text-tertiary)' }}>
+              <circle cx="6.5" cy="6.5" r="5" stroke="currentColor" strokeWidth="1.4" />
+              <path d="M10.5 10.5L13.5 13.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+            </svg>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder="Search videos…"
+              style={{
+                flex: 1,
+                background: 'none',
+                border: 'none',
+                outline: 'none',
+                fontSize: 15,
+                color: 'var(--text-primary)',
+                caretColor: 'var(--accent)',
+              }}
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: 'var(--text-tertiary)',
+                  padding: 2,
+                  display: 'flex',
+                  alignItems: 'center',
+                }}
+              >
+                <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+                  <path d="M2 2L11 11M11 2L2 11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                </svg>
+              </button>
+            )}
+          </div>
+          {searchQuery && (
+            <p style={{ margin: '6px 0 0', fontSize: 13, color: 'var(--text-tertiary)' }}>
+              {filteredVideos.length} result{filteredVideos.length !== 1 ? 's' : ''} for "{searchQuery}"
+            </p>
+          )}
+        </div>
+      )}
+
       {/* Content */}
       <div style={{
         position: 'relative',
@@ -473,6 +550,38 @@ export default function Channel() {
                 Add Videos
               </button>
             )}
+          </div>
+        ) : filteredVideos.length === 0 ? (
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            height: '100%',
+            gap: 12,
+          }}>
+            <div style={{
+              width: 80,
+              height: 80,
+              borderRadius: 22,
+              background: 'var(--surface)',
+              border: '1px solid var(--border)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}>
+              <svg width="36" height="36" viewBox="0 0 15 15" fill="none">
+                <circle cx="6.5" cy="6.5" r="5" stroke="var(--text-tertiary)" strokeWidth="1.2" />
+                <path d="M10.5 10.5L13.5 13.5" stroke="var(--text-tertiary)" strokeWidth="1.2" strokeLinecap="round" />
+              </svg>
+            </div>
+            <h2 style={{ fontSize: 24 }}>No videos found</h2>
+            <p style={{ fontSize: 16, color: 'var(--text-secondary)' }}>
+              Nothing matches "{searchQuery}"
+            </p>
+            <button className="lt-btn-secondary" onClick={() => setSearchQuery('')}>
+              Clear Search
+            </button>
           </div>
         ) : viewMode === 'grid' ? (
           <>

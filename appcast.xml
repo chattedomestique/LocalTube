@@ -8,16 +8,52 @@
         <description>LocalTube changelog</description>
         <language>en</language>
         <item>
+            <title>LocalTube 1.0.5</title>
+            <sparkle:version>6</sparkle:version>
+            <sparkle:shortVersionString>1.0.5</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <pubDate>Mon, 13 Apr 2026 15:10:42 +0000</pubDate>
+            <enclosure
+                url="https://github.com/chattedomestique/LocalTube/releases/download/v1.0.5/LocalTube-1.0.5.zip"
+                length="1586928"
+                type="application/octet-stream"
+                sparkle:edSignature="tlEFjShrwq2DwkqwHDckPP/hUFdq5wOiJbijhKukw1+Vr0Sp4LXvFsTZthxHHzgvyS2cN8r98iRygyCSylCDCw==" />
+        </item>
+        <item>
+            <title>LocalTube 1.0.4</title>
+            <sparkle:version>5</sparkle:version>
+            <sparkle:shortVersionString>1.0.4</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <pubDate>Mon, 13 Apr 2026 01:37:13 +0000</pubDate>
+            <enclosure
+                url="https://github.com/chattedomestique/LocalTube/releases/download/v1.0.4/LocalTube-1.0.4.zip"
+                length="1586853"
+                type="application/octet-stream"
+                sparkle:edSignature="TgOoIfxpGrFeMzgWYT8LGfVYsBVMNqf0XJxz0RA4c9Kqxwx3ERBhCXJKcJRmJCWW4axDoJvS17bpI+UxXYODDg==" />
+        </item>
+        <item>
+            <title>LocalTube 1.0.3</title>
+            <sparkle:version>4</sparkle:version>
+            <sparkle:shortVersionString>1.0.3</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <pubDate>Mon, 13 Apr 2026 01:05:52 +0000</pubDate>
+            <enclosure
+                url="https://github.com/chattedomestique/LocalTube/releases/download/v1.0.3/LocalTube-1.0.3.zip"
+                length="1586853"
+                type="application/octet-stream"
+                sparkle:edSignature="6LfuGazqDjwkHpxs7a3OuIe1s//UF/fMtIb+Yd/m8JBK5f3MZSXnnDYq8LvLJaqnOtJlS1L1Iy3mU8oVGjyCDA==" />
+        </item>
+        <item>
             <title>LocalTube 1.0.2</title>
             <sparkle:version>3</sparkle:version>
             <sparkle:shortVersionString>1.0.2</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-            <pubDate>Mon, 13 Apr 2026 01:01:32 +0000</pubDate>
+            <pubDate>Mon, 13 Apr 2026 01:00:00 +0000</pubDate>
             <enclosure
                 url="https://github.com/chattedomestique/LocalTube/releases/download/v1.0.2/LocalTube-1.0.2.zip"
-                length="1594798"
+                length="1594770"
                 type="application/octet-stream"
-                sparkle:edSignature="BPoRgw1jNrzn8mh0YQClOx34dTa9nFuaLwbXqXNxHVuzyemDu0gYFK+YvY3zAQQo/tg+E3lsWOh/UV7HCefABQ==" />
+                sparkle:edSignature="placeholder" />
         </item>
         <item>
             <title>LocalTube 1.0.1</title>

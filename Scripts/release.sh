@@ -123,10 +123,17 @@ gh release create "$TAG" "$ZIP_PATH" \
 # ── Update appcast.xml ────────────────────────────────────────────────────────
 echo "==> Updating appcast.xml…"
 
-# Preserve existing <item> entries so clients on old versions can still update
+# Preserve existing <item> entries so clients on old versions can still update.
+# Use Python to reliably extract complete <item>...</item> blocks — awk range
+# patterns break when any item is missing its closing tag.
 EXISTING_ITEMS=""
 if [[ -f "$ROOT_DIR/appcast.xml" ]]; then
-  EXISTING_ITEMS=$(awk '/<item>/,/<\/item>/' "$ROOT_DIR/appcast.xml" | awk 'NR>1{print prev} {prev=$0}' || true)
+  EXISTING_ITEMS=$(python3 -c "
+import re, sys
+content = open('${ROOT_DIR}/appcast.xml').read()
+items = re.findall(r'[ \t]*<item>.*?</item>', content, re.DOTALL)
+print(''.join(items))
+" 2>/dev/null || true)
 fi
 
 cat > "$ROOT_DIR/appcast.xml" <<XML

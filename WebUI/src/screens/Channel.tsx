@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { useAppStore } from '../store'
 import VideoCard, { Thumb } from '../components/VideoCard'
 import type { Video } from '../types'
@@ -18,9 +18,13 @@ export default function Channel() {
   })
   const [currentPage, setCurrentPage] = useState(0)
   const [searchQuery, setSearchQuery] = useState('')
+  const scrollRef = useRef<HTMLDivElement>(null)
 
   // Reset to first page whenever the channel changes or search changes
   useEffect(() => { setCurrentPage(0) }, [nav.channelId, searchQuery])
+
+  // Scroll content area back to top on every page change
+  useEffect(() => { scrollRef.current?.scrollTo({ top: 0, behavior: 'instant' }) }, [currentPage])
 
   const channel = channels.find(c => c.id === nav.channelId)
   const channelVideos = (nav.channelId ? videos[nav.channelId] : []) ?? []
@@ -484,7 +488,7 @@ export default function Channel() {
       )}
 
       {/* Content */}
-      <div style={{
+      <div ref={scrollRef} style={{
         position: 'relative',
         zIndex: 1,
         flex: 1,

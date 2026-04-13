@@ -23,11 +23,18 @@ struct Video: Identifiable, Codable, Hashable, Sendable {
     var downloadProgress: Double   // 0.0 – 1.0, used when state == .downloading
     var downloadError: String?     // set when state == .error
     var sortOrder: Int
+    /// Incremented each time the thumbnail file is replaced on disk.
+    /// Used as a cache-buster in the `localtube-thumb://` URL so WKWebView
+    /// re-fetches the image instead of serving the stale cached bytes.
+    var thumbnailVersion: Int
 
     // MARK: - Computed
 
+    // M2 fix: Removed FileManager.fileExists check to avoid TOCTOU race
+    // and repeated filesystem I/O on every render tick. AVPlayerItem errors
+    // are handled at playback time in PlayerOverlayController.
     var isPlayable: Bool {
-        downloadState == .ready && FileManager.default.fileExists(atPath: localFilePath)
+        downloadState == .ready && !localFilePath.isEmpty
     }
 
     var formattedDuration: String {
@@ -49,7 +56,8 @@ struct Video: Identifiable, Codable, Hashable, Sendable {
         downloadState: DownloadState = .queued,
         downloadProgress: Double = 0,
         downloadError: String? = nil,
-        sortOrder: Int = 0
+        sortOrder: Int = 0,
+        thumbnailVersion: Int = 0
     ) {
         self.id = id
         self.channelId = channelId
@@ -64,6 +72,7 @@ struct Video: Identifiable, Codable, Hashable, Sendable {
         self.downloadProgress = downloadProgress
         self.downloadError = downloadError
         self.sortOrder = sortOrder
+        self.thumbnailVersion = thumbnailVersion
     }
 }
 

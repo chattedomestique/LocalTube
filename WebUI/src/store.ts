@@ -28,6 +28,7 @@ const defaultState: AppState = {
   },
   activeDownload: undefined,
   editorRemainingSeconds: 0,
+  syncingChannelIds: [],
 }
 
 // ─── Store Shape ───────────────────────────────────────────────────────────
@@ -77,10 +78,12 @@ function applyBridgeEvent(app: AppState, event: BridgeEvent): AppState {
     case 'downloadProgress': {
       const { videoId, progress } = event.payload
       const videos = { ...app.videos }
+      let found = false
       for (const channelId of Object.keys(videos)) {
         const list = videos[channelId]
         const idx = list.findIndex(v => v.id === videoId)
         if (idx !== -1) {
+          found = true
           const updated = [...list]
           updated[idx] = {
             ...updated[idx],
@@ -90,12 +93,50 @@ function applyBridgeEvent(app: AppState, event: BridgeEvent): AppState {
           videos[channelId] = updated
         }
       }
+      if (!found) return app
       return {
         ...app,
         videos,
         activeDownload: app.activeDownload
           ? { ...app.activeDownload, progress, videoId }
           : { videoId, progress, title: '' },
+      }
+    }
+    // Batch variant: apply multiple progress updates in a single state change.
+    // Reduces 12 dispatches/sec (6 downloads × 2 ticks) to ≤1 per anim frame.
+    case 'downloadProgressBatch': {
+      const entries = event.payload
+      const videos = { ...app.videos }
+      let lastVideoId = ''
+      let lastProgress = 0
+      let anyFound = false
+      for (const [videoId, progress] of Object.entries(entries)) {
+        for (const channelId of Object.keys(videos)) {
+          const list = videos[channelId]
+          const idx = list.findIndex(v => v.id === videoId)
+          if (idx !== -1) {
+            anyFound = true
+            // Only clone the channel array once per channel
+            if (list === app.videos[channelId]) {
+              videos[channelId] = [...list]
+            }
+            videos[channelId][idx] = {
+              ...videos[channelId][idx],
+              downloadProgress: progress,
+              downloadState: 'downloading',
+            }
+            lastVideoId = videoId
+            lastProgress = progress
+          }
+        }
+      }
+      if (!anyFound) return app
+      return {
+        ...app,
+        videos,
+        activeDownload: lastVideoId
+          ? { videoId: lastVideoId, progress: lastProgress, title: app.activeDownload?.title ?? '' }
+          : app.activeDownload,
       }
     }
     case 'downloadCompleted': {
@@ -180,6 +221,13 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
     onPINValidated: fullState.onPINValidated,
   }
 
+  // rAF-batched download progress: accumulate per-video progress values and
+  // flush them all in one dispatch on the next animation frame. This coalesces
+  // 6-12 individual downloadProgress events/sec into ≤1 state update per frame,
+  // dramatically reducing React re-renders during active downloads.
+  const progressBufferRef = useRef<Record<string, number>>({})
+  const progressRafRef = useRef<number | null>(null)
+
   // Set up the bridge on mount
   useEffect(() => {
     initBridge((event: BridgeEvent) => {
@@ -192,6 +240,25 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
         reducerDispatch({ kind: 'navigate', nav: event.payload })
         return
       }
+
+      // Batch download progress events — coalesce into one dispatch per frame
+      if (event.type === 'downloadProgress') {
+        const { videoId, progress } = event.payload
+        progressBufferRef.current[videoId] = progress
+        if (progressRafRef.current === null) {
+          progressRafRef.current = requestAnimationFrame(() => {
+            progressRafRef.current = null
+            const batch = progressBufferRef.current
+            progressBufferRef.current = {}
+            reducerDispatch({
+              kind: 'bridgeEvent',
+              event: { type: 'downloadProgressBatch', payload: batch },
+            })
+          })
+        }
+        return
+      }
+
       reducerDispatch({ kind: 'bridgeEvent', event })
     })
 

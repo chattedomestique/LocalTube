@@ -20,6 +20,9 @@ export default function AddChannelModal({ onAdd, onClose }: Props) {
   const [type, setType] = useState<ChannelType>('custom')
   const [youtubeChannelId, setYoutubeChannelId] = useState('')
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
+  const [emojiTriggerHovered, setEmojiTriggerHovered] = useState(false)
+  const [hoveredTypeOpt, setHoveredTypeOpt] = useState<string | null>(null)
+  const [clearHovered, setClearHovered] = useState(false)
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault()
@@ -37,9 +40,12 @@ export default function AddChannelModal({ onAdd, onClose }: Props) {
   const canSubmit = displayName.trim().length > 0
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop" onClick={onClose} role="presentation">
       <div
         className="modal-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Add Channel"
         style={{ width: 460, padding: '28px' }}
         onClick={e => e.stopPropagation()}
       >
@@ -77,19 +83,21 @@ export default function AddChannelModal({ onAdd, onClose }: Props) {
                 <button
                   type="button"
                   onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                  onMouseEnter={() => setEmojiTriggerHovered(true)}
+                  onMouseLeave={() => setEmojiTriggerHovered(false)}
                   style={{
                     width: 46,
                     height: 46,
                     borderRadius: 10,
-                    border: '1px solid var(--border)',
-                    background: 'var(--surface-el)',
+                    border: `1px solid ${emojiTriggerHovered ? 'var(--border-strong)' : 'var(--border)'}`,
+                    background: emojiTriggerHovered ? 'var(--surface)' : 'var(--surface-el)',
                     fontSize: 22,
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     flexShrink: 0,
-                    transition: 'all 0.15s ease',
+                    transition: 'border-color 140ms cubic-bezier(0.89,0,0.14,1), background 140ms cubic-bezier(0.89,0,0.14,1)',
                   }}
                 >
                   {emoji || '📺'}
@@ -137,16 +145,19 @@ export default function AddChannelModal({ onAdd, onClose }: Props) {
                     <button
                       type="button"
                       onClick={() => { setEmoji(''); setShowEmojiPicker(false) }}
+                      onMouseEnter={() => setClearHovered(true)}
+                      onMouseLeave={() => setClearHovered(false)}
                       style={{
                         width: '100%',
                         borderRadius: 7,
                         border: 'none',
-                        background: 'transparent',
-                        color: 'var(--text-tertiary)',
+                        background: clearHovered ? 'var(--surface)' : 'transparent',
+                        color: clearHovered ? 'var(--text-secondary)' : 'var(--text-tertiary)',
                         fontSize: 11,
                         cursor: 'pointer',
                         padding: '4px',
                         marginTop: 4,
+                        transition: 'background 120ms cubic-bezier(0.89,0,0.14,1), color 120ms cubic-bezier(0.89,0,0.14,1)',
                       }}
                     >
                       Clear emoji
@@ -179,16 +190,26 @@ export default function AddChannelModal({ onAdd, onClose }: Props) {
                   key={opt.value}
                   type="button"
                   onClick={() => setType(opt.value)}
+                  onMouseEnter={() => setHoveredTypeOpt(opt.value)}
+                  onMouseLeave={() => setHoveredTypeOpt(null)}
                   style={{
                     flex: 1,
                     padding: '12px 14px',
                     borderRadius: 10,
                     border: '1px solid',
-                    borderColor: type === opt.value ? 'var(--accent)' : 'var(--border)',
-                    background: type === opt.value ? 'var(--accent-dim)' : 'var(--surface-el)',
+                    borderColor: type === opt.value
+                      ? 'var(--accent)'
+                      : hoveredTypeOpt === opt.value
+                      ? 'var(--border-strong)'
+                      : 'var(--border)',
+                    background: type === opt.value
+                      ? 'var(--accent-dim)'
+                      : hoveredTypeOpt === opt.value
+                      ? 'var(--surface)'
+                      : 'var(--surface-el)',
                     cursor: 'pointer',
                     textAlign: 'left',
-                    transition: 'all 0.15s ease',
+                    transition: 'border-color 140ms cubic-bezier(0.89,0,0.14,1), background 140ms cubic-bezier(0.89,0,0.14,1)',
                     boxShadow: type === opt.value ? '0 0 0 2px var(--accent-dim)' : 'none',
                   }}
                 >

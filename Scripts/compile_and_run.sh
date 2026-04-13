@@ -35,9 +35,10 @@ else
   log "WARN: WebUI directory not found at ${WEBUI_DIR} — skipping React build"
 fi
 
-log "==> Building and packaging ${APP_NAME}"
+CONF=${1:-debug}
+log "==> Building and packaging ${APP_NAME} (${CONF})"
 APP_NAME="$APP_NAME" BUNDLE_ID="$BUNDLE_ID" SIGNING_MODE=adhoc \
-  "${ROOT_DIR}/Scripts/package_app.sh" release
+  "${ROOT_DIR}/Scripts/package_app.sh" "$CONF"
 
 log "==> Launching ${APP_NAME}"
 if ! open "${APP_BUNDLE}"; then

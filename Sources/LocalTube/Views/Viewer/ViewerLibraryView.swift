@@ -74,9 +74,6 @@ struct ViewerLibraryView: View {
 
     // MARK: - Hidden Editor Trigger
 
-    @State private var cornerTapCount = 0
-    @State private var cornerTapTimer: Timer?
-
     private var editorAccessTrigger: some View {
         VStack {
             Spacer()

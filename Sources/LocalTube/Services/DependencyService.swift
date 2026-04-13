@@ -53,20 +53,24 @@ final class DependencyService {
         installError = nil
         defer { isInstalling = false }
 
-        // Check Homebrew first
+        // C3 fix: Require Homebrew to be pre-installed instead of downloading
+        // and piping arbitrary scripts through bash with no integrity check.
         let brewPath = await ShellRunner.which("brew")
-        if brewPath == nil {
-            await installHomebrew()
+        guard let brewPath else {
+            installError = "Homebrew is not installed. Please install it from https://brew.sh and relaunch LocalTube."
+            appendLog("ERROR: Homebrew not found.")
+            appendLog("Visit https://brew.sh to install Homebrew, then relaunch LocalTube.")
+            return
         }
 
         if !status.python3 {
-            await installBrewPackage("python3")
+            await installBrewPackage("python3", brewPath: brewPath)
         }
         if !status.ytDlp {
-            await installBrewPackage("yt-dlp")
+            await installBrewPackage("yt-dlp", brewPath: brewPath)
         }
         if !status.ffmpeg {
-            await installBrewPackage("ffmpeg")
+            await installBrewPackage("ffmpeg", brewPath: brewPath)
         }
 
         await checkAll()
@@ -101,32 +105,10 @@ final class DependencyService {
         return await ShellRunner.which("ffmpeg") != nil
     }
 
-    private func installHomebrew() async {
-        appendLog("Installing Homebrew...")
-        let script = "/bin/bash"
-        let args = ["-c", "curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh | /bin/bash"]
-        _ = ShellRunner.stream(script, args: args) { [weak self] line in
-            Task { @MainActor [weak self] in self?.appendLog(line) }
-        } onCompletion: { [weak self] code in
-            Task { @MainActor [weak self] in
-                if code != 0 {
-                    self?.installError = "Homebrew installation failed (exit \(code))"
-                } else {
-                    self?.appendLog("Homebrew installed.")
-                }
-            }
-        }
-        // Wait for installation to complete (simple polling)
-        for _ in 0..<120 {
-            try? await Task.sleep(nanoseconds: 1_000_000_000)
-            if await ShellRunner.which("brew") != nil { break }
-        }
-    }
-
-    private func installBrewPackage(_ name: String) async {
+    private func installBrewPackage(_ name: String, brewPath: String) async {
         appendLog("Installing \(name) via Homebrew...")
         await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
-            _ = ShellRunner.stream("/opt/homebrew/bin/brew", args: ["install", name]) { [weak self] line in
+            _ = ShellRunner.stream(brewPath, args: ["install", name]) { [weak self] line in
                 Task { @MainActor [weak self] in self?.appendLog(line) }
             } onCompletion: { [weak self] code in
                 Task { @MainActor [weak self] in

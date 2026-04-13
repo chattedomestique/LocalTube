@@ -21,6 +21,8 @@ enum BridgeMessageType: String, Decodable {
     case retryDownload
     case saveSettings
     case checkDependencies
+    case syncChannel
+    case uploadChannelBanner
 }
 
 struct BridgeMessage: Decodable {

@@ -2,8 +2,8 @@ import Foundation
 import AppKit
 
 enum ThumbnailService {
-    /// Extracts a thumbnail frame at t=5s from a video file using ffmpeg.
-    /// Returns the path to the created thumbnail.
+    /// L6 fix: Seek to 1s instead of 5s to handle short videos.
+    /// Extracts a thumbnail frame from a video file using ffmpeg.
     @discardableResult
     static func extract(
         videoPath: String,
@@ -13,7 +13,7 @@ enum ThumbnailService {
         _ = try await ShellRunner.run(ffmpegPath, args: [
             "-y",                       // overwrite without asking
             "-i", videoPath,
-            "-ss", "5",                 // seek to 5 seconds
+            "-ss", "1",                 // L6 fix: seek to 1s (safer for short clips)
             "-vframes", "1",            // extract 1 frame
             "-q:v", "2",                // quality (2 = near-lossless JPEG)
             outputPath
@@ -38,8 +38,9 @@ enum ThumbnailService {
         return (dir as NSString).appendingPathComponent("\(video.id.uuidString).jpg")
     }
 
+    // M4 fix: Use isExecutableFile instead of fileExists
     private static func findFfmpeg() -> String {
         let candidates = ["/opt/homebrew/bin/ffmpeg", "/usr/local/bin/ffmpeg", "/usr/bin/ffmpeg"]
-        return candidates.first { FileManager.default.fileExists(atPath: $0) } ?? "ffmpeg"
+        return candidates.first { FileManager.default.isExecutableFile(atPath: $0) } ?? "ffmpeg"
     }
 }

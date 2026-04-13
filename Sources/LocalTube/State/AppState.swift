@@ -62,6 +62,11 @@ final class AppState {
 
     var undoManager: UndoManager?
 
+    // MARK: - Sync State
+
+    /// Channel IDs currently being synced; observed by the bridge to show/hide indicators.
+    var syncingChannelIds: Set<UUID> = []
+
     // MARK: - Services (held here for lifecycle)
 
     let dependencyService = DependencyService()
@@ -87,14 +92,31 @@ final class AppState {
             try await DatabaseService.shared.open()
             let loaded = try await DatabaseService.shared.fetchAllChannels()
             channels = loaded
-            // Eager-load all videos
+            // Eager-load all videos, healing any state left over from a previous
+            // session that was killed or rebuilt mid-download.
             for channel in channels {
-                let vids = try await DatabaseService.shared.fetchVideos(forChannelId: channel.id)
+                var vids = try await DatabaseService.shared.fetchVideos(forChannelId: channel.id)
+                vids = await healInterruptedDownloads(vids)
                 videos[channel.id] = vids
             }
         } catch {
             AppLogger.error("Failed to load library: \(error.localizedDescription)")
         }
+    }
+
+    /// Resets any video that was mid-download when the previous process died.
+    /// Without this, those videos show a frozen progress bar with no way to recover
+    /// other than deleting and re-adding the video.
+    private func healInterruptedDownloads(_ vids: [Video]) async -> [Video] {
+        var healed = vids
+        for i in healed.indices where healed[i].downloadState == .downloading {
+            healed[i].downloadState    = .error
+            healed[i].downloadError    = "Download was interrupted — please tap Retry."
+            healed[i].downloadProgress = 0
+            AppLogger.info("Healed interrupted download for video \(healed[i].id)")
+            try? await DatabaseService.shared.updateVideo(healed[i])
+        }
+        return healed
     }
 
     // MARK: - Lookup Helpers
@@ -292,6 +314,56 @@ final class AppState {
         }
     }
 
+    // MARK: - Channel Sync
+
+    /// Fetches the latest video list for a YouTube source channel and adds any
+    /// new videos to the library. Also fetches the channel banner on first sync.
+    func syncChannel(_ channel: Channel) async {
+        guard let ytId = channel.youtubeChannelId, !ytId.isEmpty else { return }
+
+        syncingChannelIds.insert(channel.id)
+        NotificationCenter.default.post(name: .channelSyncStateChanged, object: nil)
+
+        defer {
+            syncingChannelIds.remove(channel.id)
+            NotificationCenter.default.post(name: .channelSyncStateChanged, object: nil)
+        }
+
+        // Fetch video list from YouTube
+        let entries = await ChannelSyncService.fetchVideoList(youtubeChannelId: ytId)
+        let existing = videosForChannel(channel.id).map { $0.youtubeVideoId }
+        let existingSet = Set(existing)
+
+        for (i, entry) in entries.enumerated() {
+            guard !existingSet.contains(entry.videoId) else { continue }
+            let video = Video(
+                channelId: channel.id,
+                youtubeVideoId: entry.videoId,
+                title: entry.title,
+                durationSeconds: entry.durationSeconds ?? 0,
+                downloadState: .queued,
+                sortOrder: (videos[channel.id]?.count ?? 0) + i
+            )
+            addVideo(video)
+            Task { await downloadService.enqueue(video: video, channel: channel) }
+        }
+
+        // Fetch banner if not already present
+        if channel.bannerPath.isEmpty, let rootFolder = settings.downloadFolderPath, !rootFolder.isEmpty {
+            if let bannerPath = await ChannelBannerService.fetchAndDownload(
+                youtubeChannelId: ytId,
+                sanitizedFolderName: channel.sanitizedFolderName,
+                rootFolder: rootFolder
+            ) {
+                if let idx = channels.firstIndex(where: { $0.id == channel.id }) {
+                    channels[idx].bannerPath = bannerPath
+                }
+                try? await DatabaseService.shared.updateChannelBanner(id: channel.id, bannerPath: bannerPath)
+                NotificationCenter.default.post(name: .channelBannerUpdated, object: nil)
+            }
+        }
+    }
+
     // MARK: - Download
 
     var activeDownload: DownloadQueueItem? {
@@ -301,4 +373,11 @@ final class AppState {
     var pendingDownloadCount: Int {
         downloadQueue.filter { $0.state == .waiting || $0.state == .active }.count
     }
+}
+
+// MARK: - Notification Names
+
+extension Notification.Name {
+    static let channelBannerUpdated    = Notification.Name("LocalTube.channelBannerUpdated")
+    static let channelSyncStateChanged = Notification.Name("LocalTube.channelSyncStateChanged")
 }

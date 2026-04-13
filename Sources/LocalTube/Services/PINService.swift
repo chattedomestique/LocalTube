@@ -1,30 +1,35 @@
 import Foundation
+import CryptoKit
 
 // MARK: - PIN Service
 //
-// Stores the parental PIN and recovery phrase in UserDefaults.
-//
-// Rationale: This is a children's media app parental lock — not a password
-// manager or banking credential.  Keychain is overkill here and, in ad-hoc
-// signed SPM builds without proper entitlements, it triggers a macOS
-// authorization dialog on every SecItemCopyMatching call.  UserDefaults is
-// the correct tool: it's fast, requires zero permissions, and survives app
-// restarts without any prompts.
+// C4 fix: Stores a salted SHA-256 hash of the PIN (never the PIN itself).
+// UserDefaults is used instead of Keychain because ad-hoc signed SPM builds
+// trigger macOS authorization dialogs with SecItemCopyMatching. Hashing the
+// PIN prevents anyone reading ~/Library/Preferences/ from recovering it.
 
 enum PINService {
     private static let defaults = UserDefaults.standard
-    private static let pinKey      = "lt.pin"
-    private static let recoveryKey = "lt.recovery"
+    private static let pinHashKey   = "lt.pin.hash"
+    private static let pinSaltKey   = "lt.pin.salt"
+    private static let pinLengthKey = "lt.pin.length"
+    private static let recoveryKey  = "lt.recovery"
+
+    // M5 fix: Rate limiting state
+    private static var failedAttempts = 0
+    private static var lockoutUntil: Date?
 
     // MARK: - PIN Storage
 
     static func savePin(_ pin: String, recoveryPhrase: String) throws {
-        defaults.set(pin,            forKey: pinKey)
+        let salt = generateSalt()
+        let hash = hashPIN(pin, salt: salt)
+        defaults.set(hash, forKey: pinHashKey)
+        defaults.set(salt, forKey: pinSaltKey)
+        defaults.set(pin.count, forKey: pinLengthKey)
         defaults.set(recoveryPhrase, forKey: recoveryKey)
-    }
-
-    static func loadPin() -> String? {
-        defaults.string(forKey: pinKey)
+        // Clear any legacy plaintext PIN
+        defaults.removeObject(forKey: "lt.pin")
     }
 
     static func loadRecoveryPhrase() -> String? {
@@ -32,31 +37,95 @@ enum PINService {
     }
 
     static func hasPIN() -> Bool {
-        loadPin() != nil
+        defaults.string(forKey: pinHashKey) != nil
+    }
+
+    /// Returns the stored PIN length (for auto-commit in the entry UI), or 6 as default.
+    static func storedPINLength() -> Int {
+        let length = defaults.integer(forKey: pinLengthKey)
+        return length > 0 ? length : 6
+    }
+
+    /// M5 fix: Returns seconds remaining in lockout, or 0 if not locked out.
+    static var lockoutRemaining: TimeInterval {
+        guard let until = lockoutUntil else { return 0 }
+        return max(0, until.timeIntervalSinceNow)
+    }
+
+    static var isLockedOut: Bool {
+        lockoutRemaining > 0
     }
 
     static func verify(_ input: String) -> Bool {
-        guard let stored = loadPin() else { return false }
-        return input == stored
+        // M5 fix: Enforce rate limiting
+        if isLockedOut { return false }
+
+        guard let storedHash = defaults.string(forKey: pinHashKey),
+              let salt = defaults.string(forKey: pinSaltKey) else { return false }
+
+        let valid = hashPIN(input, salt: salt) == storedHash
+
+        if valid {
+            failedAttempts = 0
+            lockoutUntil = nil
+        } else {
+            failedAttempts += 1
+            // Exponential backoff: 5s after 3 failures, 30s after 5, 5min after 8
+            if failedAttempts >= 3 {
+                let delay: TimeInterval
+                switch failedAttempts {
+                case 3...4:  delay = 5
+                case 5...7:  delay = 30
+                default:     delay = 300
+                }
+                lockoutUntil = Date().addingTimeInterval(delay)
+            }
+        }
+
+        return valid
     }
 
     static func deleteAll() throws {
-        defaults.removeObject(forKey: pinKey)
+        defaults.removeObject(forKey: pinHashKey)
+        defaults.removeObject(forKey: pinSaltKey)
+        defaults.removeObject(forKey: pinLengthKey)
         defaults.removeObject(forKey: recoveryKey)
+        defaults.removeObject(forKey: "lt.pin")
+        failedAttempts = 0
+        lockoutUntil = nil
     }
 
     // MARK: - Recovery Phrase Generation
 
+    // L4 fix: Use 6 words instead of 4 for better entropy
     static func generateRecoveryPhrase() -> String {
         let words = loadWordlist()
-        guard words.count >= 4 else { return "apple river cloud seven" }
+        let wordCount = 6
+        guard words.count >= wordCount else {
+            AppLogger.error("PINService: wordlist too small (\(words.count) words), need at least \(wordCount)")
+            return "apple river cloud seven garden forest"
+        }
         var selected: [String] = []
         var indices = Set<Int>()
-        while selected.count < 4 {
+        while selected.count < wordCount {
             let i = Int.random(in: 0..<words.count)
             if indices.insert(i).inserted { selected.append(words[i]) }
         }
         return selected.joined(separator: " ")
+    }
+
+    // MARK: - Hashing
+
+    private static func hashPIN(_ pin: String, salt: String) -> String {
+        let input = Data((salt + pin).utf8)
+        let digest = SHA256.hash(data: input)
+        return digest.map { String(format: "%02x", $0) }.joined()
+    }
+
+    private static func generateSalt() -> String {
+        var bytes = [UInt8](repeating: 0, count: 16)
+        _ = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+        return bytes.map { String(format: "%02x", $0) }.joined()
     }
 
     // MARK: - Word List
@@ -66,8 +135,16 @@ enum PINService {
                 .deletingLastPathComponent()
                 .appendingPathComponent("wordlist.txt"),
               let contents = try? String(contentsOf: url)
-        else { return fallbackWords }
-        return contents.components(separatedBy: .newlines).filter { !$0.isEmpty }
+        else {
+            AppLogger.error("PINService: could not load wordlist.txt, using fallback")
+            return fallbackWords
+        }
+        let words = contents.components(separatedBy: .newlines).filter { !$0.isEmpty }
+        guard !words.isEmpty else {
+            AppLogger.error("PINService: wordlist.txt is empty, using fallback")
+            return fallbackWords
+        }
+        return words
     }
 
     private static let fallbackWords = [

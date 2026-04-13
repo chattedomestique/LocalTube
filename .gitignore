@@ -33,5 +33,9 @@ version.env
 # Entitlements (generated at build time)
 .build/entitlements/
 
+# Sparkle — private signing key (never commit this)
+sparkle_private_key
+.sparkle_private_key
+
 # Logs
 *.log

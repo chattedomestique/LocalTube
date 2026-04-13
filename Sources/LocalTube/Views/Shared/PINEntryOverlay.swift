@@ -59,7 +59,7 @@ struct PINEntryOverlay: View {
         }
         .onAppear {
             // Load the actual stored PIN length so entry auto-commits at the right digit count
-            maxDigits = PINService.loadPin()?.count ?? 6
+            maxDigits = PINService.storedPINLength()
         }
         .sheet(isPresented: $showRecovery) {
             PINRecoveryView()

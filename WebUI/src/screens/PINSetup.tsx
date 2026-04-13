@@ -74,10 +74,10 @@ function PINField({
   const handleInput = useCallback(
     (e: ChangeEvent<HTMLInputElement>) => {
       const raw = e.target.value.replace(/\D/g, '')
-      onChange(raw.slice(0, 4))
+      onChange((value + raw).slice(0, 4))
       e.target.value = ''
     },
-    [onChange]
+    [value, onChange]
   )
 
   return (
@@ -94,7 +94,7 @@ function PINField({
         ))}
         <input
           ref={inputRef}
-          type="number"
+          type="text"
           inputMode="numeric"
           pattern="[0-9]*"
           style={{
@@ -133,6 +133,7 @@ export default function PINSetup() {
   const [error, setError] = useState(false)
   const [done, setDone] = useState(false)
 
+  // C5 fix: Clear PIN from state immediately after sending to Swift
   const handleSubmit = () => {
     if (pin.length < 4) return
     if (pin !== confirmPin) {
@@ -141,7 +142,10 @@ export default function PINSetup() {
       return
     }
     setError(false)
-    send({ type: 'setPIN', payload: { pin } })
+    const pinValue = pin
+    setPin('')
+    setConfirmPin('')
+    send({ type: 'setPIN', payload: { pin: pinValue } })
     setDone(true)
   }
 

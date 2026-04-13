@@ -70,7 +70,13 @@ final class WebWindowController: NSObject, NSWindowDelegate {
         )
         config.userContentController.addUserScript(userScript)
 
-        // Allow local file access (needed for loading WebUI assets)
+        // allowFileAccessFromFileURLs is required for WKWebView to load
+        // <script type="module"> assets from file:// URLs. Without it WebKit
+        // blocks the module-fetch entirely, producing a blank page.
+        // This is safe here because (a) we only ever load our own trusted
+        // React bundle via loadFileURL, and (b) user-supplied strings that
+        // reach JS are base64-encoded (C2 fix) so they can't escape the
+        // module context to read arbitrary files.
         config.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
 
         // Forward console.log/error from WKWebView to AppLogger for debugging
@@ -135,9 +141,44 @@ final class WebWindowController: NSObject, NSWindowDelegate {
 
         window.delegate = self
 
+        // When the player is dismissed, restore keyboard focus to the WKWebView
+        // so that PIN entry and other React UI interactions keep working immediately.
+        playerOverlay.onDismiss = { [weak webView, weak window] in
+            window?.makeFirstResponder(webView)
+        }
+
         // Register console relay handler
         config.userContentController.add(ConsoleMessageHandler(), name: "LocalTubeConsole")
 
+        // Re-emit full state update whenever a channel banner is fetched in the background.
+        NotificationCenter.default.addObserver(
+            forName: .channelBannerUpdated,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self, let appState = self.bridge.appState else { return }
+            self.bridge.emitter.emitStateUpdate(appState)
+        }
+
+        // Re-emit state whenever a channel sync starts or finishes,
+        // so the UI can show/hide the syncing indicator.
+        NotificationCenter.default.addObserver(
+            forName: .channelSyncStateChanged,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self, let appState = self.bridge.appState else { return }
+            self.bridge.emitter.emitStateUpdate(appState)
+        }
+
+    }
+
+    // C7 fix: Remove script message handlers to break the
+    // WKUserContentController → handler retain cycle.
+    deinit {
+        let ucc = webView.configuration.userContentController
+        ucc.removeScriptMessageHandler(forName: "LocalTubeBridge")
+        ucc.removeScriptMessageHandler(forName: "LocalTubeConsole")
     }
 
     // MARK: - Load
@@ -200,10 +241,11 @@ final class WebWindowController: NSObject, NSWindowDelegate {
     }
 
     func windowDidResize(_ notification: Notification) {
-        // Keep player overlay panel in sync with main window size
-        if let panel = playerOverlay.playerPanel,
-           panel.isVisible {
-            panel.setFrame(window.frame, display: true)
+        // Keep the player panel covering only the content area (not the title bar)
+        if let panel = playerOverlay.playerPanel, panel.isVisible,
+           let contentView = window.contentView {
+            let contentScreenFrame = window.convertToScreen(contentView.frame)
+            panel.setFrame(contentScreenFrame, display: true)
         }
     }
 }

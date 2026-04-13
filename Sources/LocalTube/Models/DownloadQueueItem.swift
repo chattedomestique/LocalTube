@@ -11,8 +11,12 @@ enum DownloadQueueState: Equatable, Sendable {
 }
 
 // MARK: - Download Queue Item
+// H2 fix: Added @MainActor to eliminate @unchecked Sendable data race.
+// All mutable state (progress, state, activeProcess) is now confined
+// to the main actor, matching the rest of the app's convention.
 @Observable
-final class DownloadQueueItem: Identifiable, @unchecked Sendable {
+@MainActor
+final class DownloadQueueItem: Identifiable {
     let id: UUID
     let videoId: UUID
     var videoTitle: String

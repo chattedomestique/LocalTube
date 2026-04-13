@@ -1,4 +1,6 @@
 import type { Channel, Video } from '../types'
+import { thumbUrl } from '../utils'
+import { Thumb } from './VideoCard'
 
 interface Props {
   channel: Channel
@@ -31,26 +33,22 @@ export default function ChannelCard({ channel, videos, isDownloading, downloadPr
         position: 'relative',
         overflow: 'hidden',
         cursor: 'pointer',
-        borderRadius: 16,
+        borderRadius: 22,
         userSelect: 'none',
         WebkitUserSelect: 'none',
       }}
     >
       {/* Thumbnail */}
       {hasThumbnail ? (
-        <img
-          src={`localtube-thumb://${thumbVideo.thumbnailPath}`}
-          alt=""
+        <Thumb
+          video={thumbVideo!}
+          className="lt-thumb"
           style={{
             position: 'absolute',
             inset: 0,
             width: '100%',
             height: '100%',
             objectFit: 'cover',
-            transition: 'transform 0.3s ease',
-          }}
-          onError={(e) => {
-            (e.target as HTMLImageElement).style.display = 'none'
           }}
         />
       ) : (
@@ -74,36 +72,37 @@ export default function ChannelCard({ channel, videos, isDownloading, downloadPr
         position: 'absolute',
         inset: 0,
         background: 'linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.2) 50%, rgba(0,0,0,0.05) 100%)',
-        transition: 'opacity 0.2s ease',
+        transition: 'opacity 140ms cubic-bezier(0.89,0,0.14,1)',
       }} />
 
-      {/* Hover glow border */}
+      {/* Hover glow border — transition now lives in .card-glow-border CSS rule */}
       <div style={{
         position: 'absolute',
         inset: 0,
-        borderRadius: 15,
+        borderRadius: 21,
         border: '1px solid transparent',
         background: 'transparent',
-        transition: 'border-color 0.2s ease',
         pointerEvents: 'none',
       }} className="card-glow-border" />
 
       {/* Top-right: video count badge */}
       <div style={{
         position: 'absolute',
-        top: 10,
-        right: 10,
-        background: 'rgba(0,0,0,0.7)',
-        backdropFilter: 'blur(8px)',
-        borderRadius: 8,
-        padding: '3px 9px',
-        fontSize: 12,
+        top: 14,
+        right: 14,
+        background: 'linear-gradient(135deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.45) 100%)',
+        backdropFilter: 'blur(16px) saturate(180%)',
+        WebkitBackdropFilter: 'blur(16px) saturate(180%)',
+        border: '0.5px solid rgba(255,255,255,0.18)',
+        boxShadow: 'inset 0 0 0 0.5px rgba(255,255,255,0.1)',
+        borderRadius: 12,
+        padding: '5px 14px',
+        fontSize: 16,
         fontWeight: 600,
         color: 'white',
         display: 'flex',
         alignItems: 'center',
         gap: 4,
-        border: '1px solid rgba(255,255,255,0.1)',
       }}>
         <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
           <rect x="0.5" y="0.5" width="4" height="4" rx="0.75" fill="currentColor" opacity="0.8" />
@@ -120,7 +119,7 @@ export default function ChannelCard({ channel, videos, isDownloading, downloadPr
         bottom: 0,
         left: 0,
         right: 0,
-        padding: '10px 14px 12px',
+        padding: '16px 20px 20px',
       }}>
         {/* Download progress bar */}
         {isDownloading && downloadProgress !== undefined && (
@@ -131,14 +130,14 @@ export default function ChannelCard({ channel, videos, isDownloading, downloadPr
               alignItems: 'center',
               marginBottom: 4,
             }}>
-              <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.7)', fontWeight: 500 }}>
+              <span style={{ fontSize: 15, color: 'rgba(255,255,255,0.7)', fontWeight: 500 }}>
                 Downloading...
               </span>
-              <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.7)' }}>
+              <span style={{ fontSize: 15, color: 'rgba(255,255,255,0.7)' }}>
                 {Math.round(downloadProgress * 100)}%
               </span>
             </div>
-            <div className="progress-bar-track" style={{ height: 3 }}>
+            <div className="progress-bar-track" style={{ height: 5 }}>
               <div
                 className="progress-bar-fill"
                 style={{ width: `${Math.round(downloadProgress * 100)}%` }}
@@ -150,21 +149,21 @@ export default function ChannelCard({ channel, videos, isDownloading, downloadPr
         {/* Channel name + emoji */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
           {channel.emoji && (
-            <span style={{ fontSize: 18, lineHeight: 1 }}>{channel.emoji}</span>
+            <span style={{ fontSize: 36, lineHeight: 1 }}>{channel.emoji}</span>
           )}
           <div>
             <div style={{
-              fontSize: 14,
+              fontSize: 26,
               fontWeight: 700,
               color: 'white',
               letterSpacing: '-0.01em',
               lineHeight: 1.2,
-              textShadow: '0 1px 3px rgba(0,0,0,0.5)',
+              textShadow: '0 2px 8px rgba(0,0,0,0.7)',
             }}>
               {channel.displayName}
             </div>
             <div style={{
-              fontSize: 11,
+              fontSize: 17,
               color: 'rgba(255,255,255,0.55)',
               marginTop: 2,
             }}>
@@ -178,19 +177,20 @@ export default function ChannelCard({ channel, videos, isDownloading, downloadPr
       {isDownloading && (
         <div style={{
           position: 'absolute',
-          top: 10,
-          left: 10,
-          width: 28,
-          height: 28,
+          top: 14,
+          left: 14,
+          width: 40,
+          height: 40,
           borderRadius: '50%',
-          background: 'rgba(0,0,0,0.6)',
-          backdropFilter: 'blur(4px)',
+          background: 'linear-gradient(135deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.45) 100%)',
+          backdropFilter: 'blur(16px) saturate(180%)',
+          WebkitBackdropFilter: 'blur(16px) saturate(180%)',
+          border: '0.5px solid rgba(255,255,255,0.16)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          border: '1px solid rgba(255,255,255,0.1)',
         }}>
-          <svg className="spinner" width="14" height="14" viewBox="0 0 14 14" fill="none">
+          <svg className="spinner" width="20" height="20" viewBox="0 0 14 14" fill="none">
             <circle cx="7" cy="7" r="5.5" stroke="rgba(255,255,255,0.2)" strokeWidth="2" />
             <path d="M7 1.5A5.5 5.5 0 0 1 12.5 7" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" />
           </svg>

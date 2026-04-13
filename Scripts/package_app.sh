@@ -11,6 +11,12 @@ MACOS_MIN_VERSION=${MACOS_MIN_VERSION:-14.0}
 SIGNING_MODE=${SIGNING_MODE:-adhoc}
 APP_IDENTITY=${APP_IDENTITY:-}
 
+# Sparkle — set these in version.env or the environment before releasing.
+# APPCAST_URL: public URL of your appcast.xml (e.g. a GitHub Gist raw URL)
+# SPARKLE_PUBLIC_KEY: base64 EdDSA public key printed by Scripts/setup-sparkle.sh
+APPCAST_URL=${APPCAST_URL:-}
+SPARKLE_PUBLIC_KEY=${SPARKLE_PUBLIC_KEY:-}
+
 if [[ -f "$ROOT/version.env" ]]; then
   source "$ROOT/version.env"
 else
@@ -55,6 +61,9 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>NSRequiresAquaSystemAppearance</key><false/>
     <key>BuildTimestamp</key><string>${BUILD_TIMESTAMP}</string>
     <key>GitCommit</key><string>${GIT_COMMIT}</string>
+    <key>SUFeedURL</key><string>${APPCAST_URL}</string>
+    <key>SUPublicEDKey</key><string>${SPARKLE_PUBLIC_KEY}</string>
+    <key>SUEnableAutomaticChecks</key><true/>
 </dict>
 </plist>
 PLIST
@@ -91,6 +100,12 @@ install_binary() {
 
 install_binary "$APP_NAME" "$APP/Contents/MacOS/$APP_NAME"
 
+# Add @executable_path/../Frameworks to rpath so dyld finds Sparkle.framework
+# at runtime. SwiftPM sets @rpath when linking but doesn't add this search path
+# for non-Xcode bundles — we patch it here after copying the binary.
+install_name_tool -add_rpath "@executable_path/../Frameworks" \
+  "$APP/Contents/MacOS/$APP_NAME" 2>/dev/null || true
+
 # Bundle app resources
 APP_RESOURCES_DIR="$ROOT/Sources/$APP_NAME/Resources"
 if [[ -d "$APP_RESOURCES_DIR" ]]; then
@@ -106,6 +121,28 @@ if [[ ${#SWIFTPM_BUNDLES[@]} -gt 0 ]]; then
   for bundle in "${SWIFTPM_BUNDLES[@]}"; do
     cp -R "$bundle" "$APP/Contents/Resources/"
   done
+fi
+
+# Copy WebUI directly into Contents/Resources/WebUI so the app can find it
+# at both Resources/WebUI/index.html and Resources/Resources/WebUI/index.html.
+WEBUI_SRC="${PREFERRED_BUILD_DIR}/${APP_NAME}_${APP_NAME}.bundle/Resources/WebUI"
+if [[ -d "$WEBUI_SRC" ]]; then
+  rm -rf "$APP/Contents/Resources/WebUI"
+  cp -R "$WEBUI_SRC" "$APP/Contents/Resources/WebUI"
+  echo "   Copied WebUI from ${WEBUI_SRC}"
+else
+  echo "WARN: WebUI not found at ${WEBUI_SRC} — skipping WebUI copy" >&2
+fi
+
+# ── Sparkle.framework ────────────────────────────────────────────────────────
+# Locate the framework in the SwiftPM build artifacts and copy it into the
+# app bundle. Sparkle is a dynamic framework and must be embedded.
+SPARKLE_FW=$(find "$ROOT/.build" -name "Sparkle.framework" -type d 2>/dev/null | head -1)
+if [[ -n "$SPARKLE_FW" ]]; then
+  cp -R "$SPARKLE_FW" "$APP/Contents/Frameworks/"
+  echo "   Bundled $(basename "$SPARKLE_FW")"
+else
+  echo "WARN: Sparkle.framework not found in .build — update checks will not work" >&2
 fi
 
 chmod -R u+w "$APP"
@@ -135,6 +172,18 @@ else
   CODESIGN_ARGS=(--force --timestamp --options runtime --sign "$APP_IDENTITY")
 fi
 
+# Sign Sparkle internals first (inside-out signing requirement)
+if [[ -d "$APP/Contents/Frameworks/Sparkle.framework" ]]; then
+  # Sign XPC services and helpers inside the framework
+  find "$APP/Contents/Frameworks/Sparkle.framework" \
+    \( -name "*.xpc" -o -name "Autoupdater" -o -name "Updater" \) \
+    -type d -o -type f | sort -r | while read -r item; do
+    codesign "${CODESIGN_ARGS[@]}" "$item" 2>/dev/null || true
+  done
+  codesign "${CODESIGN_ARGS[@]}" "$APP/Contents/Frameworks/Sparkle.framework"
+fi
+
+# Sign the main app bundle
 codesign "${CODESIGN_ARGS[@]}" \
   --entitlements "$APP_ENTITLEMENTS" \
   "$APP"

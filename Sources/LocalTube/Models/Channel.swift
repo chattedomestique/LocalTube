@@ -18,17 +18,32 @@ struct Channel: Identifiable, Codable, Hashable, Sendable {
     let folderName: String
     var sortOrder: Int
     let createdAt: Date
+    var bannerPath: String
 
     // MARK: - Computed
 
+    // M1 fix: Sanitize folderName to prevent path traversal
+    var sanitizedFolderName: String {
+        folderName
+            .replacingOccurrences(of: "..", with: "")
+            .replacingOccurrences(of: "/", with: "")
+            .replacingOccurrences(of: "\\", with: "")
+            .filter { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" }
+    }
+
     /// The channel's videos folder path relative to the root download folder.
     func videosPath(rootFolder: String) -> String {
-        (rootFolder as NSString).appendingPathComponent("\(folderName)/videos")
+        (rootFolder as NSString).appendingPathComponent("\(sanitizedFolderName)/videos")
     }
 
     /// The channel's thumbnails folder path relative to the root download folder.
     func thumbnailsPath(rootFolder: String) -> String {
-        (rootFolder as NSString).appendingPathComponent("\(folderName)/thumbnails")
+        (rootFolder as NSString).appendingPathComponent("\(sanitizedFolderName)/thumbnails")
+    }
+
+    /// The channel's banner file path relative to the root download folder.
+    func bannerFilePath(rootFolder: String) -> String {
+        (rootFolder as NSString).appendingPathComponent("\(sanitizedFolderName)/banner.jpg")
     }
 
     // MARK: - Init
@@ -41,7 +56,8 @@ struct Channel: Identifiable, Codable, Hashable, Sendable {
         youtubeChannelId: String? = nil,
         folderName: String,
         sortOrder: Int = 0,
-        createdAt: Date = Date()
+        createdAt: Date = Date(),
+        bannerPath: String = ""
     ) {
         self.id = id
         self.displayName = displayName
@@ -51,6 +67,7 @@ struct Channel: Identifiable, Codable, Hashable, Sendable {
         self.folderName = folderName
         self.sortOrder = sortOrder
         self.createdAt = createdAt
+        self.bannerPath = bannerPath
     }
 
     // MARK: - Display

@@ -10,6 +10,14 @@ enum DatabaseMigrations {
             try migration1CreateTables(db: db)
             setUserVersion(db: db, version: 1)
         }
+        if currentVersion < 2 {
+            try migration2AddChannelBanner(db: db)
+            setUserVersion(db: db, version: 2)
+        }
+        if currentVersion < 3 {
+            try migration3AddThumbnailVersion(db: db)
+            setUserVersion(db: db, version: 3)
+        }
     }
 
     // MARK: - Version Tracking
@@ -24,8 +32,16 @@ enum DatabaseMigrations {
         return Int(sqlite3_column_int(stmt, 0))
     }
 
+    // C6 fix: Avoid string interpolation for SQL. PRAGMA user_version doesn't
+    // support bind parameters, so we validate the integer range and use a
+    // hardcoded format string that cannot inject arbitrary SQL.
     private static func setUserVersion(db: OpaquePointer, version: Int) {
-        sqlite3_exec(db, "PRAGMA user_version = \(version);", nil, nil, nil)
+        guard version >= 0, version <= 9999 else {
+            AppLogger.error("DatabaseMigrations: version \(version) out of range")
+            return
+        }
+        let sql = String(format: "PRAGMA user_version = %d;", Int32(version))
+        sqlite3_exec(db, sql, nil, nil, nil)
     }
 
     // MARK: - Migration 1: Initial Schema
@@ -68,6 +84,18 @@ enum DatabaseMigrations {
         COMMIT;
         """
         try exec(db: db, sql: sql)
+    }
+
+    // MARK: - Migration 2: Add channel banner_path
+
+    private static func migration2AddChannelBanner(db: OpaquePointer) throws {
+        try exec(db: db, sql: "ALTER TABLE channels ADD COLUMN banner_path TEXT NOT NULL DEFAULT '';")
+    }
+
+    // MARK: - Migration 3: Add thumbnail_version for cache-busting
+
+    private static func migration3AddThumbnailVersion(db: OpaquePointer) throws {
+        try exec(db: db, sql: "ALTER TABLE videos ADD COLUMN thumbnail_version INTEGER NOT NULL DEFAULT 0;")
     }
 
     // MARK: - Helpers

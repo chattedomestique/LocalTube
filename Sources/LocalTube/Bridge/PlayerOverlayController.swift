@@ -18,6 +18,9 @@ final class PlayerOverlayController {
     weak var parentWindow: NSWindow?
     weak var emitter: BridgeEventEmitter?
 
+    /// Called when the player panel is dismissed (back button or video end).
+    var onDismiss: (() -> Void)?
+
     // MARK: - Show / Hide
 
     func show(video: Video, appState: AppState) {
@@ -51,7 +54,8 @@ final class PlayerOverlayController {
         }
 
         panel.makeKeyAndOrderFront(nil)
-        state.play(video: video)
+        let startSeconds = video.resumePositionSeconds > 10 ? video.resumePositionSeconds : 0
+        state.play(video: video, startSeconds: startSeconds)
 
         // Observe player stop to auto-hide
         observePlayerStop(state: state)
@@ -135,6 +139,7 @@ final class PlayerOverlayController {
             parent.removeChildWindow(panel)
             panel.orderOut(nil)
         }
+        onDismiss?()
     }
 }
 

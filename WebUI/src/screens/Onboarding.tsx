@@ -5,6 +5,7 @@ export default function Onboarding() {
   const { send, setOnFolderSelected } = useAppStore()
   const [folderPath, setFolderPath] = useState<string | null>(null)
   const [step, setStep] = useState<'welcome' | 'folder' | 'done'>('welcome')
+  const [changeHovered, setChangeHovered] = useState(false)
 
   useEffect(() => {
     setOnFolderSelected((path: string) => {
@@ -191,14 +192,17 @@ export default function Onboarding() {
               </span>
               <button
                 onClick={handleChooseFolder}
+                onMouseEnter={() => setChangeHovered(true)}
+                onMouseLeave={() => setChangeHovered(false)}
                 style={{
-                  background: 'none',
+                  background: changeHovered ? 'rgba(255,255,255,0.06)' : 'none',
                   border: 'none',
-                  color: 'var(--text-tertiary)',
+                  color: changeHovered ? 'var(--text-secondary)' : 'var(--text-tertiary)',
                   cursor: 'pointer',
                   fontSize: 12,
                   padding: '2px 6px',
                   borderRadius: 4,
+                  transition: 'background 140ms cubic-bezier(0.89,0,0.14,1), color 140ms cubic-bezier(0.89,0,0.14,1)',
                 }}
               >
                 Change

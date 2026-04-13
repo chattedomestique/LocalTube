@@ -26,7 +26,9 @@ final class PlayerState {
 
     // MARK: - Playback
 
-    func play(video: Video) {
+    /// Play `video` starting at `startSeconds`. Pass 0 to start from the beginning,
+    /// or pass `video.resumePositionSeconds` to resume where the user left off.
+    func play(video: Video, startSeconds: Double = 0) {
         guard video.isPlayable else { return }
         currentVideo = video
 
@@ -58,9 +60,9 @@ final class PlayerState {
 
             guard item.status == .readyToPlay else { return }
 
-            // Resume from saved position after the item is ready
-            if video.resumePositionSeconds > 5 {
-                let time = CMTime(seconds: video.resumePositionSeconds, preferredTimescale: 600)
+            // Seek to the requested start position
+            if startSeconds > 0 {
+                let time = CMTime(seconds: startSeconds, preferredTimescale: 600)
                 let tol  = CMTime(seconds: 1, preferredTimescale: 600)
                 await player.seek(to: time, toleranceBefore: tol, toleranceAfter: tol)
             }
@@ -93,7 +95,9 @@ final class PlayerState {
     }
 
     func stop() {
-        saveResumePosition()
+        // Don't save position if the video finished — we'll reset it to 0 instead
+        let atEnd = duration > 0 && currentTime >= duration - 2
+        if !atEnd { saveResumePosition() }
         player.pause()
         player.replaceCurrentItem(with: nil)
         isPlaying = false
@@ -166,6 +170,10 @@ final class PlayerState {
                     self.player.play()
                 } else {
                     self.isPlaying = false
+                    // Reset resume position so next play starts from beginning
+                    if let video = self.currentVideo {
+                        self.appState?.updateResumePosition(videoId: video.id, seconds: 0)
+                    }
                 }
             }
         }

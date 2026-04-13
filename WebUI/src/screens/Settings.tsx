@@ -14,13 +14,16 @@ const QUALITY_OPTIONS = [
 
 const AUTO_LOCK_OPTIONS = [5, 10, 15, 30, 60]
 
+// M14 fix: Added htmlFor/id association for accessible labels.
 function SettingRow({
   label,
   description,
+  htmlFor,
   children,
 }: {
   label: string
   description?: string
+  htmlFor?: string
   children: ReactNode
 }) {
   return (
@@ -32,14 +35,18 @@ function SettingRow({
       padding: '16px 20px',
     }}>
       <div>
-        <div style={{
-          fontSize: 14,
-          fontWeight: 500,
-          color: 'var(--text-primary)',
-          marginBottom: description ? 3 : 0,
-        }}>
+        <label
+          htmlFor={htmlFor}
+          style={{
+            fontSize: 14,
+            fontWeight: 500,
+            color: 'var(--text-primary)',
+            marginBottom: description ? 3 : 0,
+            display: 'block',
+          }}
+        >
           {label}
-        </div>
+        </label>
         {description && (
           <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
             {description}
@@ -54,7 +61,7 @@ function SettingRow({
 }
 
 function Divider() {
-  return <div style={{ height: 1, background: 'var(--border)', margin: '0 20px' }} />
+  return <div style={{ height: 1, background: 'rgba(255,255,255,0.09)', margin: '0 20px' }} />
 }
 
 export default function Settings() {
@@ -106,15 +113,18 @@ export default function Settings() {
         alignItems: 'center',
         padding: '0 20px',
         height: 56,
-        borderBottom: '1px solid var(--border)',
-        background: 'rgba(13,13,15,0.9)',
-        backdropFilter: 'blur(12px)',
+        background: 'linear-gradient(135deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.04) 100%)',
+        backgroundColor: 'rgba(13,13,15,0.82)',
+        backdropFilter: 'blur(24px) saturate(180%)',
+        WebkitBackdropFilter: 'blur(24px) saturate(180%)',
+        borderBottom: '0.5px solid rgba(255,255,255,0.1)',
         flexShrink: 0,
         gap: 12,
       }}>
         <button
           className="lt-btn-ghost"
           onClick={() => navigateTo({ screen: 'library' })}
+          aria-label="Back to Library"
           style={{ padding: '6px 10px', gap: 4, color: 'var(--text-secondary)' }}
         >
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -148,10 +158,14 @@ export default function Settings() {
         <div>
           <p className="lt-label" style={{ marginBottom: 10 }}>Downloads</p>
           <div style={{
-            background: 'var(--surface)',
-            border: '1px solid var(--border)',
+            background: 'linear-gradient(135deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.04) 100%)',
+            backgroundColor: 'rgba(20,20,25,0.7)',
+            backdropFilter: 'blur(20px) saturate(180%)',
+            WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+            border: '0.5px solid rgba(255,255,255,0.12)',
             borderRadius: 14,
             overflow: 'hidden',
+            boxShadow: '0 4px 16px rgba(0,0,0,0.35), 0 1px 4px rgba(0,0,0,0.2), inset 0 0 0 1px rgba(255,255,255,0.06)',
           }}>
             <SettingRow
               label="Download Folder"
@@ -186,8 +200,10 @@ export default function Settings() {
             <SettingRow
               label="Download Quality"
               description="Default quality for new downloads"
+              htmlFor="setting-quality"
             >
               <select
+                id="setting-quality"
                 className="lt-input"
                 value={local.downloadQuality}
                 onChange={e => setLocal(prev => ({ ...prev, downloadQuality: e.target.value }))}
@@ -205,16 +221,22 @@ export default function Settings() {
         <div>
           <p className="lt-label" style={{ marginBottom: 10 }}>Editor</p>
           <div style={{
-            background: 'var(--surface)',
-            border: '1px solid var(--border)',
+            background: 'linear-gradient(135deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.04) 100%)',
+            backgroundColor: 'rgba(20,20,25,0.7)',
+            backdropFilter: 'blur(20px) saturate(180%)',
+            WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+            border: '0.5px solid rgba(255,255,255,0.12)',
             borderRadius: 14,
             overflow: 'hidden',
+            boxShadow: '0 4px 16px rgba(0,0,0,0.35), 0 1px 4px rgba(0,0,0,0.2), inset 0 0 0 1px rgba(255,255,255,0.06)',
           }}>
             <SettingRow
               label="Auto-Lock Editor After"
               description="Automatically lock editor mode after inactivity"
+              htmlFor="setting-autolock"
             >
               <select
+                id="setting-autolock"
                 className="lt-input"
                 value={local.editorAutoLockMinutes}
                 onChange={e => setLocal(prev => ({ ...prev, editorAutoLockMinutes: Number(e.target.value) }))}
@@ -234,10 +256,14 @@ export default function Settings() {
         <div>
           <p className="lt-label" style={{ marginBottom: 10 }}>Dependencies</p>
           <div style={{
-            background: 'var(--surface)',
-            border: '1px solid var(--border)',
+            background: 'linear-gradient(135deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.04) 100%)',
+            backgroundColor: 'rgba(20,20,25,0.7)',
+            backdropFilter: 'blur(20px) saturate(180%)',
+            WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+            border: '0.5px solid rgba(255,255,255,0.12)',
             borderRadius: 14,
             overflow: 'hidden',
+            boxShadow: '0 4px 16px rgba(0,0,0,0.35), 0 1px 4px rgba(0,0,0,0.2), inset 0 0 0 1px rgba(255,255,255,0.06)',
           }}>
             <SettingRow
               label="yt-dlp"
@@ -293,10 +319,14 @@ export default function Settings() {
         <div>
           <p className="lt-label" style={{ marginBottom: 10 }}>About</p>
           <div style={{
-            background: 'var(--surface)',
-            border: '1px solid var(--border)',
+            background: 'linear-gradient(135deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.04) 100%)',
+            backgroundColor: 'rgba(20,20,25,0.7)',
+            backdropFilter: 'blur(20px) saturate(180%)',
+            WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+            border: '0.5px solid rgba(255,255,255,0.12)',
             borderRadius: 14,
             overflow: 'hidden',
+            boxShadow: '0 4px 16px rgba(0,0,0,0.35), 0 1px 4px rgba(0,0,0,0.2), inset 0 0 0 1px rgba(255,255,255,0.06)',
           }}>
             <SettingRow label="LocalTube" description="Your offline YouTube library">
               <span style={{ fontSize: 12, color: 'var(--text-tertiary)', fontFamily: 'ui-monospace, monospace' }}>
@@ -311,11 +341,14 @@ export default function Settings() {
       {(hasChanges || saved) && (
         <div style={{
           padding: '12px 24px',
-          borderTop: '1px solid var(--border)',
+          background: 'linear-gradient(135deg, rgba(255,255,255,0.09) 0%, rgba(255,255,255,0.06) 100%)',
+          backgroundColor: 'rgba(13,13,15,0.85)',
+          backdropFilter: 'blur(24px) saturate(180%)',
+          WebkitBackdropFilter: 'blur(24px) saturate(180%)',
+          borderTop: '0.5px solid rgba(255,255,255,0.1)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          background: 'var(--surface)',
           flexShrink: 0,
         }}>
           <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>

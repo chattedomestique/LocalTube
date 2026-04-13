@@ -57,7 +57,19 @@ final class ThumbnailURLSchemeHandler: NSObject, WKURLSchemeHandler {
         var path = url.path
         if path.isEmpty { path = url.absoluteString }
         // URL-decode percent encoding
-        return path.removingPercentEncoding ?? path
+        let decoded = path.removingPercentEncoding ?? path
+
+        // C1 fix: Normalize the path and verify it hasn't escaped the expected
+        // thumbnail directories. Reject any path containing ".." components.
+        let standardized = URL(fileURLWithPath: decoded).standardizedFileURL.path
+        guard !standardized.contains("..") else { return "" }
+
+        // Only allow image files (no arbitrary file reads)
+        let ext = (standardized as NSString).pathExtension.lowercased()
+        let allowedExtensions: Set<String> = ["jpg", "jpeg", "png", "webp", "gif"]
+        guard allowedExtensions.contains(ext) else { return "" }
+
+        return standardized
     }
 
     private func mimeType(for path: String) -> String {

@@ -17,49 +17,79 @@ enum ShellError: Error, LocalizedError {
 // MARK: - Shell Runner
 
 enum ShellRunner {
-    /// Runs a command and returns captured stdout. Throws if exit code != 0.
+    /// M3 fix: Runs a command with an optional timeout. Validates binary exists before launch.
     static func run(
         _ launchPath: String,
         args: [String],
-        environment: [String: String]? = nil
+        environment: [String: String]? = nil,
+        timeout: TimeInterval = 120
     ) async throws -> String {
-        try await withCheckedThrowingContinuation { continuation in
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: launchPath)
-            process.arguments = args
+        // M3 fix: Validate the binary exists before attempting launch
+        guard FileManager.default.isExecutableFile(atPath: launchPath) else {
+            throw ShellError.launchFailed("Binary not found or not executable: \(launchPath)")
+        }
 
-            var env = ProcessInfo.processInfo.environment
-            // Ensure Homebrew paths are included
-            env["PATH"] = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:" + (env["PATH"] ?? "")
-            if let extra = environment {
-                env.merge(extra) { _, new in new }
-            }
-            process.environment = env
+        return try await withThrowingTaskGroup(of: String.self) { group in
+            group.addTask {
+                try await withCheckedThrowingContinuation { continuation in
+                    let process = Process()
+                    process.executableURL = URL(fileURLWithPath: launchPath)
+                    process.arguments = args
 
-            let stdout = Pipe()
-            let stderr = Pipe()
-            process.standardOutput = stdout
-            process.standardError = stderr
+                    var env = ProcessInfo.processInfo.environment
+                    env["PATH"] = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:" + (env["PATH"] ?? "")
+                    // Force UTF-8 I/O for Python-based tools (yt-dlp, etc.) so
+                    // emoji and non-ASCII characters are not garbled when the
+                    // app process has no locale set (common in .app bundles).
+                    env["PYTHONIOENCODING"] = "utf-8"
+                    env["PYTHONLEGACYWINDOWSSTDIO"] = "0"
+                    env["LANG"] = env["LANG"] ?? "en_US.UTF-8"
+                    env["LC_ALL"] = env["LC_ALL"] ?? "en_US.UTF-8"
+                    env["LC_CTYPE"] = "UTF-8"
+                    if let extra = environment {
+                        env.merge(extra) { _, new in new }
+                    }
+                    process.environment = env
 
-            process.terminationHandler = { p in
-                let outData = stdout.fileHandleForReading.readDataToEndOfFile()
-                let errData = stderr.fileHandleForReading.readDataToEndOfFile()
-                let outStr = String(data: outData, encoding: .utf8) ?? ""
-                let errStr = String(data: errData, encoding: .utf8) ?? ""
-                let combined = outStr + errStr
+                    let stdout = Pipe()
+                    let stderr = Pipe()
+                    process.standardOutput = stdout
+                    process.standardError = stderr
 
-                if p.terminationStatus == 0 {
-                    continuation.resume(returning: outStr.trimmingCharacters(in: .whitespacesAndNewlines))
-                } else {
-                    continuation.resume(throwing: ShellError.nonZeroExit(p.terminationStatus, combined.trimmingCharacters(in: .whitespacesAndNewlines)))
+                    process.terminationHandler = { p in
+                        let outData = stdout.fileHandleForReading.readDataToEndOfFile()
+                        let errData = stderr.fileHandleForReading.readDataToEndOfFile()
+                        // String(decoding:as:) never fails — invalid UTF-8 sequences
+                        // become U+FFFD replacement characters instead of silently
+                        // dropping all output (which the `?? ""` fallback would do).
+                        let outStr = String(decoding: outData, as: UTF8.self)
+                        let errStr = String(decoding: errData, as: UTF8.self)
+                        let combined = outStr + errStr
+
+                        if p.terminationStatus == 0 {
+                            continuation.resume(returning: outStr.trimmingCharacters(in: .whitespacesAndNewlines))
+                        } else {
+                            continuation.resume(throwing: ShellError.nonZeroExit(p.terminationStatus, combined.trimmingCharacters(in: .whitespacesAndNewlines)))
+                        }
+                    }
+
+                    do {
+                        try process.run()
+                    } catch {
+                        continuation.resume(throwing: ShellError.launchFailed(error.localizedDescription))
+                    }
                 }
             }
 
-            do {
-                try process.run()
-            } catch {
-                continuation.resume(throwing: ShellError.launchFailed(error.localizedDescription))
+            // M3 fix: Timeout task
+            group.addTask {
+                try await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
+                throw ShellError.launchFailed("Process timed out after \(Int(timeout))s")
             }
+
+            let result = try await group.next()!
+            group.cancelAll()
+            return result
         }
     }
 
@@ -78,6 +108,12 @@ enum ShellRunner {
 
         var env = ProcessInfo.processInfo.environment
         env["PATH"] = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:" + (env["PATH"] ?? "")
+        // Force UTF-8 I/O for Python-based tools (yt-dlp, etc.)
+        env["PYTHONIOENCODING"] = "utf-8"
+        env["PYTHONLEGACYWINDOWSSTDIO"] = "0"
+        env["LANG"] = env["LANG"] ?? "en_US.UTF-8"
+        env["LC_ALL"] = env["LC_ALL"] ?? "en_US.UTF-8"
+        env["LC_CTYPE"] = "UTF-8"
         if let extra = environment {
             env.merge(extra) { _, new in new }
         }
@@ -93,9 +129,8 @@ enum ShellRunner {
         func processBuffer() {
             while let newline = buffer.firstIndex(of: UInt8(ascii: "\n")) {
                 let lineData = buffer[buffer.startIndex..<newline]
-                if let line = String(data: lineData, encoding: .utf8) {
-                    onLine(line)
-                }
+                let line = String(decoding: lineData, as: UTF8.self)
+                onLine(line)
                 buffer = buffer[(newline + 1)...]
             }
         }
@@ -118,9 +153,8 @@ enum ShellRunner {
             stdout.fileHandleForReading.readabilityHandler = nil
             stderr.fileHandleForReading.readabilityHandler = nil
             // Flush remaining buffer
-            let remaining = buffer
-            if !remaining.isEmpty, let line = String(data: remaining, encoding: .utf8) {
-                onLine(line)
+            if !buffer.isEmpty {
+                onLine(String(decoding: buffer, as: UTF8.self))
             }
             onCompletion(p.terminationStatus)
         }

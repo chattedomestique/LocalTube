@@ -33,8 +33,9 @@ struct NativePlayerView: NSViewRepresentable {
 struct VideoPlayerView: View {
     let videoId: UUID
 
-    @Environment(AppState.self)   private var appState
+    @Environment(AppState.self)    private var appState
     @Environment(PlayerState.self) private var playerState
+    @State private var resumePromptVideo: Video?
 
     var body: some View {
         ZStack {
@@ -44,6 +45,22 @@ struct VideoPlayerView: View {
                 .ignoresSafeArea()
 
             PlayerControlsOverlay(onBack: { goBack() })
+
+            if let video = resumePromptVideo {
+                ResumePromptOverlay(
+                    video: video,
+                    onResume: {
+                        resumePromptVideo = nil
+                        playerState.play(video: video, startSeconds: video.resumePositionSeconds)
+                    },
+                    onStartOver: {
+                        resumePromptVideo = nil
+                        playerState.play(video: video, startSeconds: 0)
+                    }
+                )
+                .transition(.opacity)
+                .animation(.easeInOut(duration: 0.25), value: resumePromptVideo == nil)
+            }
         }
         .onAppear  { startPlayback() }
         .onDisappear { playerState.stop() }
@@ -59,7 +76,12 @@ struct VideoPlayerView: View {
 
     private func startPlayback() {
         guard let video = appState.videoById(videoId) else { return }
-        playerState.play(video: video)
+        if video.resumePositionSeconds > 10 {
+            // Show resume prompt — don't start playback yet
+            resumePromptVideo = video
+        } else {
+            playerState.play(video: video, startSeconds: 0)
+        }
         // Do NOT auto-enter full screen — the transition causes SwiftUI to
         // rebuild the view hierarchy, firing onDisappear → stop() which kills
         // playback mid-transition.  Users can use the green traffic-light button
@@ -74,6 +96,48 @@ struct VideoPlayerView: View {
             window.toggleFullScreen(nil)
         }
         if !appState.viewerPath.isEmpty { appState.viewerPath.removeLast() }
+    }
+}
+
+// MARK: - Resume Prompt Overlay
+
+private struct ResumePromptOverlay: View {
+    let video: Video
+    let onResume: () -> Void
+    let onStartOver: () -> Void
+
+    var body: some View {
+        ZStack {
+            LTScrimBackground()
+
+            VStack(spacing: 24) {
+                Image(systemName: "play.circle.fill")
+                    .font(.system(size: 88))
+                    .foregroundStyle(Color.ltAccent)
+
+                VStack(spacing: 8) {
+                    Text(video.title)
+                        .font(.ltHeadline)
+                        .foregroundStyle(Color.ltText)
+                        .multilineTextAlignment(.center)
+                        .lineLimit(2)
+
+                    Text("You watched \(DurationFormatter.format(seconds: video.resumePositionSeconds)) of this video.")
+                        .font(.ltBody)
+                        .foregroundStyle(Color.ltTextSecondary)
+                }
+
+                HStack(spacing: 16) {
+                    Button("Start Over", action: onStartOver)
+                        .buttonStyle(LTSecondaryButtonStyle())
+
+                    Button("Resume from \(DurationFormatter.format(seconds: video.resumePositionSeconds))", action: onResume)
+                        .buttonStyle(LTButtonStyle())
+                }
+            }
+            .padding(48)
+            .frame(maxWidth: 520)
+        }
     }
 }
 

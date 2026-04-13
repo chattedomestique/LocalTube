@@ -7,6 +7,8 @@ struct ViewerChannelView: View {
     // Persisted across sessions — survives app restart
     @AppStorage("viewerGridScale") private var gridScale: Double = 1.0
 
+    @State private var searchQuery: String = ""
+
     private let baseCardWidth: CGFloat = 260
 
     private var gridColumns: [GridItem] {
@@ -16,8 +18,15 @@ struct ViewerChannelView: View {
     }
 
     private var channel: Channel? { appState.channelById(channelId) }
-    private var videos: [Video] {
+
+    private var allVideos: [Video] {
         appState.videosForChannel(channelId).filter { $0.downloadState == .ready }
+    }
+
+    private var filteredVideos: [Video] {
+        let q = searchQuery.trimmingCharacters(in: .whitespaces)
+        guard !q.isEmpty else { return allVideos }
+        return allVideos.filter { $0.title.localizedCaseInsensitiveContains(q) }
     }
 
     var body: some View {
@@ -35,28 +44,35 @@ struct ViewerChannelView: View {
                                 .font(.ltHero)
                                 .foregroundStyle(Color.ltText)
                                 .lineLimit(1)
-                            Text("\(videos.count) video\(videos.count == 1 ? "" : "s")")
+                            Text("\(allVideos.count) video\(allVideos.count == 1 ? "" : "s")")
                                 .font(.ltCaption)
                                 .foregroundStyle(Color.ltTextSecondary)
                         }
 
                         Spacer()
 
+                        // Search bar — hidden when no videos (stable layout)
+                        if !allVideos.isEmpty {
+                            searchBar
+                        }
+
                         // Tile-size slider — opacity-hidden when no videos (stable layout)
                         tileScaleControl
-                            .opacity(videos.isEmpty ? 0 : 1)
-                            .allowsHitTesting(!videos.isEmpty)
+                            .opacity(allVideos.isEmpty ? 0 : 1)
+                            .allowsHitTesting(!allVideos.isEmpty)
                     }
                     .padding(.horizontal, 40)
                     .padding(.top, 36)
                     .padding(.bottom, 24)
 
-                    if videos.isEmpty {
+                    if allVideos.isEmpty {
                         emptyState
+                    } else if filteredVideos.isEmpty {
+                        noResultsState
                     } else {
                         ScrollView {
                             LazyVGrid(columns: gridColumns, spacing: LT.gridSpacing) {
-                                ForEach(videos) { video in
+                                ForEach(filteredVideos) { video in
                                     VideoCard(
                                         video: video,
                                         scale: gridScale,
@@ -84,6 +100,48 @@ struct ViewerChannelView: View {
                 backButton
             }
         }
+    }
+
+    // MARK: - Search Bar
+
+    private var searchBar: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 22, weight: .semibold))
+                .foregroundStyle(searchQuery.isEmpty ? Color.ltTextTertiary : Color.ltAccent)
+
+            TextField("Search videos…", text: $searchQuery)
+                .font(.ltHeadline)
+                .foregroundStyle(Color.ltText)
+                .textFieldStyle(.plain)
+                .frame(minWidth: 200, maxWidth: 360)
+
+            if !searchQuery.isEmpty {
+                Button {
+                    searchQuery = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 20))
+                        .foregroundStyle(Color.ltTextTertiary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Clear search")
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 14)
+        .background(
+            RoundedRectangle(cornerRadius: LT.buttonCornerRadius)
+                .fill(Color.ltSurface)
+                .overlay(
+                    RoundedRectangle(cornerRadius: LT.buttonCornerRadius)
+                        .strokeBorder(
+                            searchQuery.isEmpty ? Color.clear : Color.ltAccent.opacity(0.6),
+                            lineWidth: 2
+                        )
+                )
+        )
+        .animation(.easeInOut(duration: 0.15), value: searchQuery.isEmpty)
     }
 
     // MARK: - Tile Scale Control
@@ -140,7 +198,7 @@ struct ViewerChannelView: View {
         .accessibilityLabel("Back to library")
     }
 
-    // MARK: - Empty State
+    // MARK: - Empty States
 
     private var emptyState: some View {
         VStack(spacing: 24) {
@@ -156,6 +214,32 @@ struct ViewerChannelView: View {
             Text("Videos are still downloading. Check back soon!")
                 .font(.ltBody)
                 .foregroundStyle(Color.ltTextSecondary)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var noResultsState: some View {
+        VStack(spacing: 24) {
+            Spacer()
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 80))
+                .foregroundStyle(Color.ltTextTertiary)
+
+            Text("No videos found")
+                .font(.ltHero)
+                .foregroundStyle(Color.ltText)
+
+            Text("Nothing matches \"\(searchQuery)\"")
+                .font(.ltBody)
+                .foregroundStyle(Color.ltTextSecondary)
+
+            Button {
+                searchQuery = ""
+            } label: {
+                Text("Clear Search")
+            }
+            .buttonStyle(LTSecondaryButtonStyle())
             Spacer()
         }
         .frame(maxWidth: .infinity)

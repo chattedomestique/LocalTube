@@ -15,13 +15,28 @@ final class BridgeEventEmitter {
     func emit(_ event: String, payload: [String: Any] = [:]) {
         guard let webView else { return }
 
-        // Serialise the full BridgeEvent as a single {type, payload} JSON object.
-        // React's bridge.ts initBridge expects: dispatch(event: BridgeEvent)
+        // Serialise the envelope to JSON, then convert to pure-ASCII by
+        // replacing every non-ASCII UTF-8 sequence with its \uXXXX escape.
+        // This is the key fix for emoji / curly-quote corruption:
+        //   JSONSerialization emits raw UTF-8 bytes for non-ASCII characters.
+        //   atob() in JS decodes base64 to a "binary string" where each byte
+        //   becomes an individual JS char (code 0-255).  Feeding that binary
+        //   string directly to JSON.parse() splits multi-byte sequences into
+        //   garbage characters ("🥁" → four Latin-1 chars; """ → "â€œ").
+        //   Converting to ASCII-first (all non-ASCII → \uXXXX / surrogates)
+        //   makes the base64 payload pure ASCII, so atob() + JSON.parse()
+        //   always round-trip correctly — no TextDecoder workaround needed.
         let envelope: [String: Any] = ["type": event, "payload": payload]
-        guard let jsonData = try? JSONSerialization.data(withJSONObject: envelope),
-              let jsonString = String(data: jsonData, encoding: .utf8) else { return }
+        guard let jsonData = try? JSONSerialization.data(withJSONObject: envelope) else { return }
+        let asciiJSON = jsonData.asciiSafeJSONString
+        let base64 = Data(asciiJSON.utf8).base64EncodedString()
 
-        let js = "window.LocalTubeBridge && window.LocalTubeBridge.dispatch(\(jsonString));"
+        let js = """
+        if (window.LocalTubeBridge) {
+            try { window.LocalTubeBridge.dispatch(JSON.parse(atob('\(base64)'))); }
+            catch(e) { console.error('Bridge decode error', e); }
+        }
+        """
 
         // Must use .page world — bootstrap script and React both run in the page's
         // default content world, not the isolated .defaultClient world.
@@ -64,6 +79,13 @@ final class BridgeEventEmitter {
     }
 }
 
+// MARK: - Shared Formatter
+// M10 fix: Cache ISO8601DateFormatter to avoid re-creating on every bridgePayload call.
+private let sharedISO8601Formatter: ISO8601DateFormatter = {
+    let f = ISO8601DateFormatter()
+    return f
+}()
+
 // MARK: - AppState → Bridge Payload
 
 extension AppState {
@@ -98,6 +120,9 @@ extension AppState {
             ]
         }
 
+        // Channels currently being synced
+        payload["syncingChannelIds"] = syncingChannelIds.map { $0.uuidString }
+
         return payload
     }
 }
@@ -110,7 +135,8 @@ extension Channel {
             "type":        type.rawValue,
             "folderName":  folderName,
             "sortOrder":   sortOrder,
-            "createdAt":   ISO8601DateFormatter().string(from: createdAt),
+            "createdAt":   sharedISO8601Formatter.string(from: createdAt),
+            "bannerPath":  bannerPath.isEmpty ? "" : "localtube-thumb://\(bannerPath)",
         ]
         if let emoji = emoji              { p["emoji"]            = emoji }
         if let ytId  = youtubeChannelId   { p["youtubeChannelId"] = ytId  }
@@ -126,14 +152,16 @@ extension Video {
             "youtubeVideoId":        youtubeVideoId,
             "title":                 title,
             "localFilePath":         localFilePath,
-            "downloadedAt":          ISO8601DateFormatter().string(from: downloadedAt),
+            "downloadedAt":          sharedISO8601Formatter.string(from: downloadedAt),
             "durationSeconds":       durationSeconds,
             "resumePositionSeconds": resumePositionSeconds,
             "downloadState":         downloadState.rawValue,
             "downloadProgress":      downloadProgress,
             "sortOrder":             sortOrder,
-            // Convert filesystem thumbnail path to our custom scheme URL for WKWebView
-            "thumbnailPath":         thumbnailPath.isEmpty ? "" : "localtube-thumb://\(thumbnailPath)",
+            // Convert filesystem thumbnail path to our custom scheme URL for WKWebView.
+            // Append ?v=N so WKWebView re-fetches when the file is replaced on disk.
+            "thumbnailPath":         thumbnailPath.isEmpty ? "" : "localtube-thumb://\(thumbnailPath)?v=\(thumbnailVersion)",
+            "thumbnailVersion":      thumbnailVersion,
         ]
         if let err = downloadError { p["downloadError"] = err }
         return p

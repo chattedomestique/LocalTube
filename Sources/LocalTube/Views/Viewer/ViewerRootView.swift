@@ -29,7 +29,8 @@ struct ViewerRootView: View {
                 .allowsHitTesting(appState.showPINEntry)
                 .animation(.easeInOut(duration: 0.2), value: appState.showPINEntry)
         }
-        .onAppear {
+        // L1 fix: Use .task {} for structured concurrency (auto-cancelled on disappear).
+        .task {
             // Wire appState into the existing PlayerState rather than creating a new
             // instance — recreating would orphan the already-configured AVPlayer.
             playerState.appState = appState

@@ -19,6 +19,7 @@ export default function Editor() {
   const [selectedChannelId, setSelectedChannelId] = useState<string | null>(
     channels[0]?.id ?? null
   )
+  const [hoveredChannelId, setHoveredChannelId] = useState<string | null>(null)
   const [showAddChannel, setShowAddChannel] = useState(false)
   const [showAddVideos, setShowAddVideos] = useState(false)
   const [showExitConfirm, setShowExitConfirm] = useState(false)
@@ -247,15 +248,21 @@ export default function Editor() {
                   <div
                     key={channel.id}
                     onClick={() => { setSelectedChannelId(channel.id); setEditingChannelId(null) }}
+                    onMouseEnter={() => setHoveredChannelId(channel.id)}
+                    onMouseLeave={() => setHoveredChannelId(null)}
                     style={{
                       padding: '8px 10px',
                       borderRadius: 9,
-                      background: isSelected ? 'var(--accent-dim)' : 'transparent',
+                      background: isSelected
+                        ? 'var(--accent-dim)'
+                        : hoveredChannelId === channel.id
+                        ? 'rgba(255,255,255,0.04)'
+                        : 'transparent',
                       border: '1px solid',
                       borderColor: isSelected ? 'rgba(155,93,229,0.3)' : 'transparent',
                       marginBottom: 2,
                       cursor: 'pointer',
-                      transition: 'all 0.12s ease',
+                      transition: 'background 140ms cubic-bezier(0.89,0,0.14,1)',
                     }}
                   >
                     {isEditing ? (
@@ -302,35 +309,10 @@ export default function Editor() {
                           />
                         </div>
                         <div style={{ display: 'flex', gap: 5 }}>
-                          <button
-                            onClick={handleEditSave}
-                            style={{
-                              flex: 1,
-                              fontSize: 11,
-                              fontWeight: 600,
-                              padding: '4px',
-                              borderRadius: 5,
-                              border: 'none',
-                              background: 'var(--accent)',
-                              color: 'white',
-                              cursor: 'pointer',
-                            }}
-                          >
+                          <button className="lt-btn-xs primary" onClick={handleEditSave}>
                             Save
                           </button>
-                          <button
-                            onClick={() => setEditingChannelId(null)}
-                            style={{
-                              flex: 1,
-                              fontSize: 11,
-                              padding: '4px',
-                              borderRadius: 5,
-                              border: '1px solid var(--border)',
-                              background: 'transparent',
-                              color: 'var(--text-secondary)',
-                              cursor: 'pointer',
-                            }}
-                          >
+                          <button className="lt-btn-xs secondary" onClick={() => setEditingChannelId(null)}>
                             Cancel
                           </button>
                         </div>
@@ -376,19 +358,8 @@ export default function Editor() {
                         {/* Actions */}
                         <div style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
                           <button
+                            className="lt-row-btn"
                             onClick={(e) => { e.stopPropagation(); handleEditStart(channel) }}
-                            style={{
-                              width: 24,
-                              height: 24,
-                              borderRadius: 5,
-                              border: 'none',
-                              background: 'transparent',
-                              color: 'var(--text-tertiary)',
-                              cursor: 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                            }}
                             title="Rename"
                           >
                             <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
@@ -396,19 +367,8 @@ export default function Editor() {
                             </svg>
                           </button>
                           <button
+                            className="lt-row-btn destructive"
                             onClick={(e) => { e.stopPropagation(); setDeleteConfirmId(channel.id) }}
-                            style={{
-                              width: 24,
-                              height: 24,
-                              borderRadius: 5,
-                              border: 'none',
-                              background: 'transparent',
-                              color: 'var(--text-tertiary)',
-                              cursor: 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                            }}
                             title="Delete"
                           >
                             <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
@@ -614,8 +574,8 @@ export default function Editor() {
       {deleteConfirmId && (() => {
         const ch = channels.find(c => c.id === deleteConfirmId)
         return ch ? (
-          <div className="modal-backdrop">
-            <div className="modal-panel" style={{ width: 340, padding: '28px' }}>
+          <div className="modal-backdrop" role="presentation">
+            <div className="modal-panel" role="dialog" aria-modal="true" aria-label="Confirm delete channel" style={{ width: 340, padding: '28px' }}>
               <div style={{
                 width: 48,
                 height: 48,
@@ -659,8 +619,8 @@ export default function Editor() {
 
       {/* Exit editor confirm */}
       {showExitConfirm && (
-        <div className="modal-backdrop">
-          <div className="modal-panel" style={{ width: 320, padding: '28px' }}>
+        <div className="modal-backdrop" role="presentation">
+          <div className="modal-panel" role="dialog" aria-modal="true" aria-label="Confirm exit editor mode" style={{ width: 320, padding: '28px' }}>
             <h2 style={{ fontSize: 16, marginBottom: 8 }}>Exit Editor Mode?</h2>
             <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 20 }}>
               You'll need to enter your PIN again to re-enter editor mode.

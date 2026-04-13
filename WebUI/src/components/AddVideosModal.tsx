@@ -54,9 +54,12 @@ export default function AddVideosModal({ channelName, onAdd, onClose }: Props) {
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop" onClick={onClose} role="presentation">
       <div
         className="modal-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Add Videos"
         style={{ width: 520, padding: '28px' }}
         onClick={e => e.stopPropagation()}
       >

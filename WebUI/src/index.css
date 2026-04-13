@@ -20,13 +20,25 @@
   --shadow-md:       0 4px 12px rgba(0, 0, 0, 0.5), 0 2px 4px rgba(0, 0, 0, 0.4);
   --shadow-lg:       0 10px 30px rgba(0, 0, 0, 0.6), 0 4px 10px rgba(0, 0, 0, 0.5);
   --shadow-accent:   0 0 20px rgba(155, 93, 229, 0.3);
-  --radius-sm:       6px;
-  --radius-md:       10px;
-  --radius-lg:       14px;
-  --radius-xl:       18px;
-  --radius-2xl:      24px;
-  --transition:      150ms cubic-bezier(0.4, 0, 0.2, 1);
-  --transition-slow: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+  --radius-sm:       8px;
+  --radius-md:       12px;
+  --radius-lg:       18px;
+  --radius-xl:       22px;
+  --radius-2xl:      30px;
+  --ease:            cubic-bezier(0.89, 0, 0.14, 1);
+  --transition:      140ms cubic-bezier(0.89, 0, 0.14, 1);
+  --transition-slow: 240ms cubic-bezier(0.89, 0, 0.14, 1);
+
+  /* Glass system tokens */
+  --glass-bg: linear-gradient(135deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.05) 50%, rgba(230,240,255,0.06) 100%);
+  --glass-bg-frosted: linear-gradient(135deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.08) 50%, rgba(230,240,255,0.10) 100%);
+  --glass-border: rgba(255,255,255,0.13);
+  --glass-border-strong: rgba(255,255,255,0.22);
+  --glass-blur: blur(20px) saturate(180%);
+  --glass-blur-frosted: blur(28px) saturate(200%);
+  --glass-shadow: 0 8px 32px rgba(0,0,0,0.45), 0 2px 8px rgba(0,0,0,0.25), inset 0 0 0 1px rgba(255,255,255,0.08);
+  --glass-shadow-lg: 0 12px 48px rgba(0,0,0,0.55), 0 4px 16px rgba(0,0,0,0.35), inset 0 0 0 1px rgba(255,255,255,0.12);
+  --glass-shadow-sm: 0 4px 16px rgba(0,0,0,0.35), 0 1px 4px rgba(0,0,0,0.2), inset 0 0 0 1px rgba(255,255,255,0.06);
 }
 
 /* ─── Reset & Base ────────────────────────────────────────────────────────── */
@@ -44,8 +56,8 @@ html, body {
 body {
   background: var(--bg);
   color: var(--text-primary);
-  font-family: -apple-system, 'SF Pro Display', 'SF Pro Text', system-ui, sans-serif;
-  font-size: 14px;
+  font-family: -apple-system, 'SF Pro Display', 'SF Pro Text', system-ui, 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
+  font-size: 20px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -75,8 +87,8 @@ p {
 
 /* ─── Scrollbars ──────────────────────────────────────────────────────────── */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 10px;
+  height: 10px;
 }
 
 ::-webkit-scrollbar-track {
@@ -94,34 +106,58 @@ p {
 
 /* ─── Custom Utilities ────────────────────────────────────────────────────── */
 .lt-surface {
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background: var(--glass-bg);
+  background-color: rgba(26,26,31,0.75);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 0.5px solid var(--glass-border);
 }
 
 .lt-surface-el {
-  background: var(--surface-el);
-  border: 1px solid var(--border);
+  background: var(--glass-bg);
+  background-color: rgba(34,34,40,0.8);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 0.5px solid var(--glass-border);
 }
 
 .lt-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background: var(--glass-bg);
+  background-color: rgba(26,26,31,0.7);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 0.5px solid var(--glass-border);
   border-radius: var(--radius-xl);
-  transition: var(--transition);
+  box-shadow: var(--glass-shadow-sm);
+  position: relative;
+  will-change: transform;
+  transition:
+    transform    260ms cubic-bezier(0.34, 1.2, 0.64, 1),
+    box-shadow   220ms cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 180ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .lt-card:hover {
-  border-color: var(--border-strong);
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
+  border-color: var(--glass-border-strong);
+  transform: scale(1.03);
+  box-shadow: var(--glass-shadow);
+  z-index: 1;
+}
+.lt-card:active {
+  transform: scale(0.97);
+  box-shadow: var(--glass-shadow-sm);
+  transition:
+    transform    100ms cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow   100ms cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 100ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .lt-btn-primary {
   background: var(--accent);
   color: white;
   font-weight: 600;
-  font-size: 14px;
-  padding: 10px 20px;
+  font-size: 18px;
+  padding: 14px 28px;
   border: none;
   border-radius: var(--radius-lg);
   cursor: pointer;
@@ -143,31 +179,40 @@ p {
 }
 
 .lt-btn-secondary {
-  background: var(--surface-el);
+  background: linear-gradient(135deg, rgba(255,255,255,0.09) 0%, rgba(255,255,255,0.06) 100%);
+  background-color: rgba(34,34,40,0.6);
   color: var(--text-primary);
   font-weight: 500;
-  font-size: 14px;
-  padding: 10px 20px;
-  border: 1px solid var(--border);
+  font-size: 18px;
+  padding: 14px 28px;
+  border: 0.5px solid var(--glass-border);
   border-radius: var(--radius-lg);
   cursor: pointer;
   transition: var(--transition);
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  backdrop-filter: blur(16px) saturate(160%);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+  box-shadow: var(--glass-shadow-sm);
 }
 
 .lt-btn-secondary:hover {
-  background: var(--surface);
-  border-color: var(--border-strong);
+  background: linear-gradient(135deg, rgba(255,255,255,0.14) 0%, rgba(255,255,255,0.10) 100%);
+  border-color: var(--glass-border-strong);
+  box-shadow: var(--glass-shadow);
+}
+.lt-btn-secondary:active {
+  transform: scale(0.98);
+  transition-duration: 80ms;
 }
 
 .lt-btn-ghost {
   background: transparent;
   color: var(--text-secondary);
   font-weight: 500;
-  font-size: 14px;
-  padding: 8px 14px;
+  font-size: 18px;
+  padding: 12px 20px;
   border: none;
   border-radius: var(--radius-md);
   cursor: pointer;
@@ -178,16 +223,22 @@ p {
 }
 
 .lt-btn-ghost:hover {
-  background: var(--surface-el);
+  background: linear-gradient(135deg, rgba(255,255,255,0.09) 0%, rgba(255,255,255,0.06) 100%);
+  backdrop-filter: blur(16px) saturate(160%);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
   color: var(--text-primary);
+}
+.lt-btn-ghost:active {
+  background: rgba(255,255,255,0.08);
+  transition-duration: 80ms;
 }
 
 .lt-btn-destructive {
   background: rgba(248, 113, 113, 0.15);
   color: var(--destructive);
   font-weight: 500;
-  font-size: 14px;
-  padding: 8px 16px;
+  font-size: 18px;
+  padding: 12px 20px;
   border: 1px solid rgba(248, 113, 113, 0.3);
   border-radius: var(--radius-md);
   cursor: pointer;
@@ -201,18 +252,26 @@ p {
   background: rgba(248, 113, 113, 0.25);
   border-color: rgba(248, 113, 113, 0.5);
 }
+.lt-btn-destructive:active {
+  transform: scale(0.98);
+  transition-duration: 80ms;
+}
 
 .lt-input {
-  background: var(--surface-el);
+  background: linear-gradient(135deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.04) 100%);
+  background-color: rgba(26,26,31,0.8);
   color: var(--text-primary);
-  border: 1px solid var(--border);
+  border: 0.5px solid var(--glass-border);
   border-radius: var(--radius-lg);
-  padding: 10px 14px;
-  font-size: 14px;
+  padding: 14px 18px;
+  font-size: 18px;
   font-family: inherit;
   outline: none;
   width: 100%;
   transition: var(--transition);
+  backdrop-filter: blur(16px) saturate(160%);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+  box-shadow: inset 0 1px 3px rgba(0,0,0,0.2);
 }
 
 .lt-input::placeholder {
@@ -220,12 +279,12 @@ p {
 }
 
 .lt-input:focus {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-dim);
+  border-color: rgba(155,93,229,0.6);
+  box-shadow: 0 0 0 3px rgba(155,93,229,0.18), inset 0 1px 3px rgba(0,0,0,0.2);
 }
 
 .lt-label {
-  font-size: 12px;
+  font-size: 15px;
   font-weight: 600;
   color: var(--text-secondary);
   letter-spacing: 0.06em;
@@ -304,9 +363,9 @@ p {
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.7);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: rgba(0,0,0,0.6);
+  backdrop-filter: blur(16px) saturate(150%);
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -320,10 +379,13 @@ p {
 }
 
 .modal-panel {
-  background: var(--surface);
-  border: 1px solid var(--border-strong);
+  background: var(--glass-bg-frosted);
+  background-color: rgba(20,20,25,0.85);
+  backdrop-filter: var(--glass-blur-frosted);
+  -webkit-backdrop-filter: var(--glass-blur-frosted);
+  border: 0.5px solid var(--glass-border-strong);
   border-radius: var(--radius-2xl);
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--glass-shadow-lg), 0 0 0 0.5px rgba(255,255,255,0.05) inset;
   animation: modalIn 200ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
 }
 
@@ -336,6 +398,19 @@ p {
     opacity: 1;
     transform: scale(1) translateY(0);
   }
+}
+
+/* ─── Glass Panel ─────────────────────────────────────────────────────────── */
+/* Used for Settings section groups, etc. */
+.lt-glass-panel {
+  background: var(--glass-bg);
+  background-color: rgba(20,20,25,0.72);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 0.5px solid var(--glass-border);
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: var(--glass-shadow-sm);
 }
 
 /* ─── Progress Bar ────────────────────────────────────────────────────────── */
@@ -373,6 +448,287 @@ p {
   -webkit-line-clamp: 1;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+/* ─── Keyboard / Input Fixes ─────────────────────────────────────────────── */
+/* Allow text selection and keyboard typing inside all input elements.         */
+/* The body has user-select:none for drag UX, but inputs need it re-enabled.  */
+input, textarea, [contenteditable] {
+  -webkit-user-select: text;
+  user-select: text;
+  pointer-events: auto;
+}
+
+/* ─── Icon Button ─────────────────────────────────────────────────────────── */
+/* Small square / round icon-only buttons used in nav bars and toolbars.      */
+.lt-icon-btn {
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  transition: background var(--transition), color var(--transition);
+  flex-shrink: 0;
+}
+.lt-icon-btn:hover {
+  background: var(--surface-el);
+  color: var(--text-primary);
+}
+.lt-icon-btn:active {
+  background: rgba(255,255,255,0.1);
+}
+
+/* ─── Editor Toggle ───────────────────────────────────────────────────────── */
+.lt-editor-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 18px;
+  border-radius: 8px;
+  border: 0.5px solid var(--glass-border);
+  background: linear-gradient(135deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.04) 100%);
+  backdrop-filter: blur(16px) saturate(160%);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+  color: var(--text-secondary);
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.lt-editor-toggle:hover {
+  border-color: var(--glass-border-strong);
+  background: linear-gradient(135deg, rgba(255,255,255,0.11) 0%, rgba(255,255,255,0.08) 100%);
+  color: var(--text-primary);
+}
+.lt-editor-toggle:active {
+  transform: scale(0.97);
+  transition-duration: 80ms;
+}
+.lt-editor-toggle.active {
+  border-color: rgba(155,93,229,0.45);
+  background: linear-gradient(135deg, rgba(155,93,229,0.18) 0%, rgba(155,93,229,0.12) 100%);
+  color: var(--accent);
+}
+.lt-editor-toggle.active:hover {
+  border-color: rgba(155,93,229,0.6);
+  background: linear-gradient(135deg, rgba(155,93,229,0.24) 0%, rgba(155,93,229,0.18) 100%);
+}
+
+/* ─── View Toggle Button ──────────────────────────────────────────────────── */
+.lt-view-toggle-btn {
+  width: 40px;
+  height: 38px;
+  border-radius: 10px;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition);
+}
+.lt-view-toggle-btn:hover {
+  color: var(--text-secondary);
+  background: rgba(255,255,255,0.06);
+}
+.lt-view-toggle-btn:active {
+  background: rgba(255,255,255,0.12) !important;
+  transition-duration: 80ms;
+}
+.lt-view-toggle-btn.active {
+  background: linear-gradient(135deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.07) 100%);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: var(--text-primary);
+  border: 0.5px solid var(--glass-border);
+  box-shadow: var(--glass-shadow-sm);
+}
+
+/* ─── Frosted Glass Overlay Utilities ────────────────────────────────────── */
+/* Use on any element that floats on top of content (badges, hover overlays). */
+.lt-glass {
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Frosted-glass pill used for hover play buttons and similar light overlays.
+   Inner top-edge highlight simulates the light catching the glass surface. */
+.lt-glass-light {
+  background: rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(32px) saturate(200%);
+  -webkit-backdrop-filter: blur(32px) saturate(200%);
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.28),
+    0 4px 20px rgba(0, 0, 0, 0.4);
+}
+
+/* ─── Scroll-driven card reveal ──────────────────────────────────────────── */
+@keyframes reveal {
+  from { opacity: 0; translate: 0 40px; }
+  to   { opacity: 1; translate: 0 0; }
+}
+.reveal {
+  animation: reveal linear both;
+  animation-timeline: view();
+  animation-range: entry 0% entry 100%;
+  /* Isolate each card wrapper so layout/paint changes inside one card       */
+  /* (e.g. download progress bar) can't cascade to siblings or cause the    */
+  /* browser to recalculate styles for the entire grid.                     */
+  contain: layout style paint;
+}
+
+/* ─── Thumbnail zoom helper ───────────────────────────────────────────────── */
+.lt-thumb {
+  transform-origin: center center;
+}
+
+/* ─── Video Card ─────────────────────────────────────────────────────────── */
+/* All hover/active animation via CSS — no React re-renders needed.          */
+/* will-change is safe now: pagination caps visible cards at 16–48, so       */
+/* compositor memory stays bounded. Each card gets its own GPU layer,        */
+/* isolating hover animations from sibling DOM updates (download progress).  */
+.lt-video-card {
+  will-change: transform;
+  transition: transform 280ms cubic-bezier(0.25, 1, 0.5, 1),
+              box-shadow 280ms cubic-bezier(0.25, 1, 0.5, 1),
+              border-color 280ms cubic-bezier(0.25, 1, 0.5, 1);
+}
+.lt-video-card:hover {
+  transform: scale(1.03);
+  border-color: rgba(255,255,255,0.22);
+  box-shadow: 0 12px 40px rgba(0,0,0,0.5), 0 4px 12px rgba(0,0,0,0.3);
+  z-index: 1;
+}
+.lt-video-card:active {
+  transform: scale(0.97);
+  box-shadow: none;
+  transition-duration: 100ms;
+}
+.lt-video-card:hover .lt-play-btn {
+  opacity: 1;
+  transform: scale(1);
+}
+.lt-play-btn {
+  opacity: 0;
+  transform: scale(0.85);
+  /* No backdrop-filter here — keeps 16 invisible buttons off the compositor */
+  background: transparent;
+  border: 1px solid transparent;
+  transition: opacity 180ms ease, transform 220ms cubic-bezier(0.25, 1, 0.5, 1);
+}
+/* Compositor layer only created for the ONE card being hovered */
+.lt-video-card:hover .lt-play-btn {
+  background: rgba(255,255,255,0.18);
+  backdrop-filter: blur(32px) saturate(200%);
+  -webkit-backdrop-filter: blur(32px) saturate(200%);
+  border-color: rgba(255,255,255,0.32);
+  box-shadow: inset 0 1px 1px rgba(255,255,255,0.22), 0 4px 16px rgba(0,0,0,0.4);
+}
+.lt-play-btn:hover {
+  background: rgba(255,255,255,0.28) !important;
+  border-color: rgba(255,255,255,0.5) !important;
+  box-shadow: inset 0 1px 1px rgba(255,255,255,0.3), 0 8px 24px rgba(0,0,0,0.55) !important;
+  transform: scale(1.12) !important;
+}
+.lt-video-card:hover .lt-editor-overlay {
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+
+/* ─── Channel card glow border (activated by .lt-card:hover parent) ───────── */
+.card-glow-border {
+  transition: border-color 180ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.lt-card:hover .card-glow-border {
+  border-color: var(--glass-border-strong) !important;
+}
+
+/* ─── Sidebar row action buttons (rename / delete icons in Editor) ────────── */
+.lt-row-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 5px;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--transition), color var(--transition);
+  flex-shrink: 0;
+}
+.lt-row-btn:hover {
+  background: var(--surface-el);
+  color: var(--text-secondary);
+}
+.lt-row-btn:active {
+  background: rgba(255,255,255,0.1);
+  transition-duration: 80ms;
+}
+.lt-row-btn.destructive:hover {
+  background: rgba(248,113,113,0.12);
+  color: var(--destructive);
+}
+.lt-row-btn.destructive:active {
+  background: rgba(248,113,113,0.2);
+}
+
+/* ─── Small inline Save / Cancel buttons (Editor inline edit) ─────────────── */
+.lt-btn-xs {
+  font-size: 14px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition), transform var(--transition);
+  flex: 1;
+  text-align: center;
+}
+.lt-btn-xs.primary {
+  background: var(--accent);
+  color: white;
+  border: none;
+}
+.lt-btn-xs.primary:hover  { background: var(--accent-hover); }
+.lt-btn-xs.primary:active { transform: scale(0.96); transition-duration: 80ms; }
+.lt-btn-xs.secondary {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+.lt-btn-xs.secondary:hover  { background: var(--surface-el); color: var(--text-primary); }
+.lt-btn-xs.secondary:active { background: var(--surface); transition-duration: 80ms; }
+
+/* ─── Inline retry / small destructive buttons ───────────────────────────── */
+.lt-btn-retry {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--destructive);
+  background: rgba(248,113,113,0.12);
+  border: 1px solid rgba(248,113,113,0.28);
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background var(--transition), border-color var(--transition), transform var(--transition);
+  padding: 5px 12px;
+}
+.lt-btn-retry:hover {
+  background: rgba(248,113,113,0.22);
+  border-color: rgba(248,113,113,0.5);
+}
+.lt-btn-retry:active {
+  transform: scale(0.96);
+  transition-duration: 80ms;
 }
 
 /* ─── Select ──────────────────────────────────────────────────────────────── */

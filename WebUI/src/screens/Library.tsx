@@ -31,11 +31,13 @@ export default function Library() {
       <div style={{
         display: 'flex',
         alignItems: 'center',
-        padding: '0 24px',
-        height: 56,
-        borderBottom: '1px solid var(--border)',
-        background: 'rgba(13,13,15,0.9)',
-        backdropFilter: 'blur(12px)',
+        padding: '0 40px',
+        height: 80,
+        background: 'linear-gradient(135deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.04) 100%)',
+        backgroundColor: 'rgba(13,13,15,0.82)',
+        backdropFilter: 'blur(24px) saturate(180%)',
+        WebkitBackdropFilter: 'blur(24px) saturate(180%)',
+        borderBottom: '0.5px solid rgba(255,255,255,0.1)',
         flexShrink: 0,
         gap: 12,
       } as CSSProperties}>
@@ -46,21 +48,21 @@ export default function Library() {
           gap: 9,
         } as CSSProperties}>
           <div style={{
-            width: 28,
-            height: 28,
-            borderRadius: 8,
+            width: 44,
+            height: 44,
+            borderRadius: 12,
             background: 'linear-gradient(135deg, #9b5de5, #60a5fa)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             flexShrink: 0,
           }}>
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <svg width="24" height="24" viewBox="0 0 16 16" fill="none">
               <polygon points="6,4 13,8 6,12" fill="white" />
             </svg>
           </div>
           <span style={{
-            fontSize: 16,
+            fontSize: 28,
             fontWeight: 700,
             letterSpacing: '-0.02em',
             color: 'var(--text-primary)',
@@ -78,11 +80,11 @@ export default function Library() {
             gap: 8,
             justifyContent: 'center',
           }}>
-            <svg className="spinner" width="12" height="12" viewBox="0 0 12 12" fill="none">
+            <svg className="spinner" width="16" height="16" viewBox="0 0 12 12" fill="none">
               <circle cx="6" cy="6" r="4.5" stroke="rgba(255,255,255,0.2)" strokeWidth="1.5" />
               <path d="M6 1.5A4.5 4.5 0 0 1 10.5 6" stroke="var(--accent)" strokeWidth="1.5" strokeLinecap="round" />
             </svg>
-            <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+            <span style={{ fontSize: 16, color: 'var(--text-secondary)' }}>
               {activeDownload.title || 'Downloading...'} — {Math.round(activeDownload.progress * 100)}%
             </span>
           </div>
@@ -98,24 +100,8 @@ export default function Library() {
         } as CSSProperties}>
           {/* Editor mode toggle */}
           <button
+            className={`lt-editor-toggle${appMode === 'editor' ? ' active' : ''}`}
             onClick={handleEditorToggle}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              padding: '5px 12px',
-              borderRadius: 8,
-              border: '1px solid',
-              borderColor: appMode === 'editor' ? 'rgba(155,93,229,0.5)' : 'var(--border)',
-              background: appMode === 'editor' ? 'rgba(155,93,229,0.15)' : 'transparent',
-              color: appMode === 'editor' ? 'var(--accent)' : 'var(--text-secondary)',
-              fontSize: 12,
-              fontWeight: 600,
-              cursor: 'pointer',
-              transition: 'all 0.15s ease',
-              letterSpacing: '0.02em',
-              textTransform: 'uppercase',
-            }}
           >
             <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
               {appMode === 'editor' ? (
@@ -172,7 +158,7 @@ export default function Library() {
       <div style={{
         flex: 1,
         overflowY: 'auto',
-        padding: '24px',
+        padding: '44px',
       }}>
         {sortedChannels.length === 0 ? (
           // Empty state
@@ -185,29 +171,32 @@ export default function Library() {
             gap: 16,
           }}>
             <div style={{
-              width: 80,
-              height: 80,
-              borderRadius: 24,
-              background: 'var(--surface)',
-              border: '1px solid var(--border)',
+              width: 120,
+              height: 120,
+              borderRadius: 36,
+              background: 'linear-gradient(135deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.04) 100%)',
+              backdropFilter: 'blur(20px) saturate(180%)',
+              WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+              border: '0.5px solid rgba(255,255,255,0.13)',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.4), inset 0 0 0 1px rgba(255,255,255,0.06)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               marginBottom: 8,
             }}>
-              <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
+              <svg width="56" height="56" viewBox="0 0 36 36" fill="none">
                 <rect x="3" y="7" width="30" height="22" rx="4" stroke="var(--text-tertiary)" strokeWidth="2" fill="none" />
                 <polygon points="14,13 26,18 14,23" fill="var(--text-tertiary)" />
               </svg>
             </div>
-            <h2 style={{ fontSize: 20, color: 'var(--text-primary)' }}>
+            <h2 style={{ fontSize: 36, color: 'var(--text-primary)' }}>
               No channels yet
             </h2>
             <p style={{
               color: 'var(--text-secondary)',
-              fontSize: 14,
+              fontSize: 20,
               textAlign: 'center',
-              maxWidth: 280,
+              maxWidth: 380,
             }}>
               {appMode === 'editor'
                 ? 'Head to the Editor to create channels and add videos.'
@@ -217,7 +206,7 @@ export default function Library() {
               <button
                 className="lt-btn-primary"
                 onClick={() => navigateTo({ screen: 'editor' })}
-                style={{ marginTop: 8 }}
+                style={{ marginTop: 16 }}
               >
                 Open Editor
               </button>
@@ -230,12 +219,12 @@ export default function Library() {
               display: 'flex',
               alignItems: 'baseline',
               justifyContent: 'space-between',
-              marginBottom: 16,
+              marginBottom: 28,
             }}>
-              <h2 style={{ fontSize: 18, fontWeight: 600, color: 'var(--text-primary)' }}>
+              <h2 style={{ fontSize: 36, fontWeight: 800, color: 'var(--text-primary)' }}>
                 Channels
               </h2>
-              <span style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>
+              <span style={{ fontSize: 18, color: 'var(--text-tertiary)' }}>
                 {sortedChannels.length} {sortedChannels.length === 1 ? 'channel' : 'channels'}
               </span>
             </div>
@@ -243,8 +232,8 @@ export default function Library() {
             {/* Grid */}
             <div style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
-              gap: 16,
+              gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))',
+              gap: 24,
             }}>
               {sortedChannels.map(channel => {
                 const channelVideos = videos[channel.id] ?? []

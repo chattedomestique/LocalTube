@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useAppStore } from '../store'
-import VideoCard from '../components/VideoCard'
+import VideoCard, { Thumb } from '../components/VideoCard'
 import type { Video } from '../types'
+import { thumbUrl } from '../utils'
 
 export default function Channel() {
   const { state, nav, navigateTo, send } = useAppStore()
@@ -11,11 +12,24 @@ export default function Channel() {
   const [showAddVideos, setShowAddVideos] = useState(false)
   const [urlInput, setUrlInput] = useState('')
   const [adding, setAdding] = useState(false)
+  const [pageSize, setPageSize] = useState<number>(() => {
+    const saved = localStorage.getItem('lt-page-size')
+    return saved ? Number(saved) : 24
+  })
+  const [currentPage, setCurrentPage] = useState(0)
+
+  // Reset to first page whenever the channel changes
+  useEffect(() => { setCurrentPage(0) }, [nav.channelId])
 
   const channel = channels.find(c => c.id === nav.channelId)
   const channelVideos = (nav.channelId ? videos[nav.channelId] : []) ?? []
-  const sortedVideos = [...channelVideos].sort((a, b) => a.sortOrder - b.sortOrder)
   const isEditor = appMode === 'editor'
+
+  const sortedVideos = useMemo(
+    () => [...channelVideos].sort((a, b) => a.sortOrder - b.sortOrder),
+    [channelVideos]
+  )
+  const isSyncing = channel ? (state.syncingChannelIds ?? []).includes(channel.id) : false
 
   if (!channel) {
     return (
@@ -40,6 +54,9 @@ export default function Channel() {
     navigateTo({ screen: 'library' })
   }
 
+  // H9 fix: Keep loading state visible until a stateUpdate event arrives from
+  // Swift confirming the videos were processed. Use a timeout fallback so the
+  // UI is never stuck if Swift fails to respond.
   const handleAddVideos = () => {
     const urls = urlInput
       .split('\n')
@@ -49,8 +66,12 @@ export default function Channel() {
     setAdding(true)
     send({ type: 'addVideoURLs', payload: { channelId: channel.id, urls } })
     setUrlInput('')
-    setAdding(false)
-    setShowAddVideos(false)
+    // Reset after a reasonable timeout — the stateUpdate event from Swift
+    // will update the video list. This timeout is a fallback.
+    setTimeout(() => {
+      setAdding(false)
+      setShowAddVideos(false)
+    }, 2000)
   }
 
   const handleDeleteVideo = (videoId: string) => {
@@ -61,24 +82,143 @@ export default function Channel() {
     send({ type: 'retryDownload', payload: { videoId } })
   }
 
-  const readyCount = sortedVideos.filter(v => v.downloadState === 'ready').length
+  const handlePageSize = (size: number) => {
+    setPageSize(size)
+    setCurrentPage(0)
+    localStorage.setItem('lt-page-size', String(size))
+  }
+
+  const readyCount = useMemo(
+    () => sortedVideos.filter(v => v.downloadState === 'ready').length,
+    [sortedVideos]
+  )
+  const totalPages = Math.ceil(sortedVideos.length / pageSize)
+  const pagedVideos = useMemo(
+    () => sortedVideos.slice(currentPage * pageSize, (currentPage + 1) * pageSize),
+    [sortedVideos, currentPage, pageSize]
+  )
+
+  // Pick a random thumbnail from this channel to use as the ambient background.
+  // Stable per channel (only re-randomizes when the channel id changes or the
+  // first playable thumb becomes available after an initial empty load).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const bgThumb = useMemo(() => {
+    const withThumb = sortedVideos.filter(v => v.thumbnailPath)
+    if (withThumb.length === 0) return null
+    return withThumb[Math.floor(Math.random() * withThumb.length)]
+  }, [channel.id, sortedVideos.length > 0])
 
   return (
     <div className="screen-slide-in" style={{
       display: 'flex',
       flexDirection: 'column',
       height: '100%',
+      position: 'relative',
+      overflow: 'hidden',
       background: 'var(--bg)',
     }}>
+      {/* ── Ambient background ─────────────────────────────────────────────── */}
+      {bgThumb && (
+        <div style={{ position: 'absolute', inset: 0, zIndex: 0, pointerEvents: 'none' }}>
+          {/* Layer 1 — primary blur: high saturation + contrast to push color
+              values apart, reducing quantization banding. */}
+          <Thumb
+            video={bgThumb}
+            style={{
+              position: 'absolute',
+              inset: 0,
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              filter: 'blur(64px) saturate(200%) contrast(1.12) brightness(0.85)',
+              opacity: 0.52,
+              transform: 'scale(1.3)',
+              transformOrigin: 'center',
+            }}
+          />
+          {/* Layer 2 — screen blend at a different blur radius + hue rotation.
+              The two overlapping colour fields break each other's banding
+              without adding noise — same technique as Apple's album art blurs. */}
+          <Thumb
+            video={bgThumb}
+            style={{
+              position: 'absolute',
+              inset: 0,
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              filter: 'blur(40px) saturate(240%) brightness(1.15) hue-rotate(22deg)',
+              opacity: 0.18,
+              transform: 'scale(1.3) rotate(180deg)',
+              transformOrigin: 'center',
+              mixBlendMode: 'screen',
+            }}
+          />
+          {/* Dark scrim so cards and text stay legible */}
+          <div style={{
+            position: 'absolute',
+            inset: 0,
+            background: 'rgba(13,13,15,0.68)',
+          }} />
+          {/* Monochromatic pixel noise — breaks banding at 10% opacity.
+              SVG feTurbulence with 1 octave + high baseFrequency ≈ small discrete
+              pixel grain (no smooth swirls). stitchTiles keeps the tile seam invisible. */}
+          <div style={{
+            position: 'absolute',
+            inset: 0,
+            opacity: 0.10,
+            backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='1' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")`,
+            backgroundRepeat: 'repeat',
+            backgroundSize: '96px 96px',
+          }} />
+        </div>
+      )}
+
+      {/* ── Banner hero ────────────────────────────────────────────────────── */}
+      {channel.bannerPath ? (
+        <div style={{
+          position: 'relative',
+          zIndex: 1,
+          width: '100%',
+          height: 300,
+          flexShrink: 0,
+          overflow: 'hidden',
+        }}>
+          <img
+            src={channel.bannerPath}
+            alt=""
+            style={{
+              position: 'absolute',
+              inset: 0,
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              filter: 'brightness(0.7) saturate(1.1)',
+            }}
+            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+          />
+          {/* Bottom gradient scrim so content below stays readable */}
+          <div style={{
+            position: 'absolute',
+            inset: 0,
+            background: 'linear-gradient(to bottom, transparent 40%, rgba(13,13,15,0.9) 100%)',
+          }} />
+        </div>
+      ) : null}
+
       {/* Top bar */}
       <div style={{
+        position: 'relative',
+        zIndex: 1,
         display: 'flex',
         alignItems: 'center',
-        padding: '0 20px',
-        height: 56,
-        borderBottom: '1px solid var(--border)',
-        background: 'rgba(13,13,15,0.9)',
-        backdropFilter: 'blur(12px)',
+        padding: '0 40px',
+        height: 80,
+        background: 'linear-gradient(135deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.04) 100%)',
+        backgroundColor: bgThumb ? 'rgba(13,13,15,0.75)' : 'rgba(13,13,15,0.88)',
+        backdropFilter: 'blur(28px) saturate(200%)',
+        WebkitBackdropFilter: 'blur(28px) saturate(200%)',
+        borderBottom: '0.5px solid rgba(255,255,255,0.1)',
         flexShrink: 0,
         gap: 12,
       }}>
@@ -86,9 +226,9 @@ export default function Channel() {
         <button
           className="lt-btn-ghost"
           onClick={() => navigateTo({ screen: 'library' })}
-          style={{ padding: '6px 10px', gap: 4, color: 'var(--text-secondary)' }}
+          style={{ padding: '6px 10px', gap: 6, color: 'var(--text-secondary)' }}
         >
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <svg width="20" height="20" viewBox="0 0 16 16" fill="none">
             <path d="M10 3L5 8L10 13" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
           Library
@@ -102,16 +242,18 @@ export default function Channel() {
             <span style={{ fontSize: 20 }}>{channel.emoji}</span>
           )}
           <div>
-            <h1 style={{ fontSize: 16, fontWeight: 700, letterSpacing: '-0.02em' }}>
+            <h1 style={{ fontSize: 28, fontWeight: 800, letterSpacing: '-0.02em' }}>
               {channel.displayName}
             </h1>
           </div>
           <div style={{
-            padding: '2px 9px',
+            padding: '4px 14px',
             borderRadius: 99,
-            background: 'var(--surface-el)',
-            border: '1px solid var(--border)',
-            fontSize: 12,
+            background: 'linear-gradient(135deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.04) 100%)',
+            border: '0.5px solid rgba(255,255,255,0.13)',
+            backdropFilter: 'blur(16px) saturate(160%)',
+            WebkitBackdropFilter: 'blur(16px) saturate(160%)',
+            fontSize: 16,
             color: 'var(--text-secondary)',
             marginLeft: 4,
           }}>
@@ -121,12 +263,56 @@ export default function Channel() {
 
         {/* Right controls */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {/* Syncing indicator — shown in any mode while sync is running */}
+          {isSyncing && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 8, background: 'rgba(155,93,229,0.1)', border: '0.5px solid rgba(155,93,229,0.3)' }}>
+              <svg className="spinner" width="12" height="12" viewBox="0 0 12 12" fill="none">
+                <circle cx="6" cy="6" r="4.5" stroke="rgba(155,93,229,0.3)" strokeWidth="1.5" />
+                <path d="M6 1.5A4.5 4.5 0 0 1 10.5 6" stroke="var(--accent)" strokeWidth="1.5" strokeLinecap="round" />
+              </svg>
+              <span style={{ fontSize: 16, color: 'var(--accent)', fontWeight: 500 }}>Syncing…</span>
+            </div>
+          )}
+
+          {/* Sync button — source channels only, editor mode */}
+          {isEditor && channel?.type === 'source' && !isSyncing && (
+            <button
+              className="lt-btn-secondary"
+              onClick={() => send({ type: 'syncChannel', payload: { channelId: channel.id } })}
+              style={{ padding: '6px 12px', fontSize: 16 }}
+              title="Fetch latest videos from YouTube"
+            >
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+                <path d="M1.5 6.5A5 5 0 0 1 11 3.5M11.5 6.5A5 5 0 0 1 2 9.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                <path d="M9 1.5L11 3.5L9 5.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M4 7.5L2 9.5L4 11.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              Sync
+            </button>
+          )}
+
+          {/* Upload banner (editor) */}
+          {isEditor && (
+            <button
+              className="lt-btn-secondary"
+              onClick={() => send({ type: 'uploadChannelBanner', payload: { channelId: channel.id } })}
+              style={{ padding: '6px 12px', fontSize: 16 }}
+              title={channel.type === 'source' ? 'Override banner with custom image' : 'Upload channel banner'}
+            >
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+                <path d="M6.5 9V3M6.5 3L4 5.5M6.5 3L9 5.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M2 10.5H11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+              </svg>
+              Banner
+            </button>
+          )}
+
           {/* Add videos (editor) */}
           {isEditor && (
             <button
               className="lt-btn-primary"
               onClick={() => setShowAddVideos(true)}
-              style={{ padding: '6px 12px', fontSize: 12 }}
+              style={{ padding: '6px 12px', fontSize: 16 }}
             >
               <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
                 <path d="M6.5 2V11M2 6.5H11" stroke="white" strokeWidth="1.8" strokeLinecap="round" />
@@ -140,7 +326,7 @@ export default function Channel() {
             <button
               className="lt-btn-destructive"
               onClick={() => setShowDeleteConfirm(true)}
-              style={{ padding: '6px 12px', fontSize: 12 }}
+              style={{ padding: '6px 12px', fontSize: 16 }}
             >
               <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
                 <path d="M2 3.5H11M4.5 3.5V2.5A1 1 0 0 1 5.5 1.5H7.5A1 1 0 0 1 8.5 2.5V3.5M5 6V10M8 6V10" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
@@ -150,31 +336,57 @@ export default function Channel() {
             </button>
           )}
 
+          {/* Page size selector — editor only */}
+          {isEditor && (
+            <div style={{
+              display: 'flex',
+              background: 'linear-gradient(135deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.04) 100%)',
+              border: '0.5px solid rgba(255,255,255,0.13)',
+              backdropFilter: 'blur(16px) saturate(160%)',
+              WebkitBackdropFilter: 'blur(16px) saturate(160%)',
+              borderRadius: 8,
+              padding: 2,
+              gap: 1,
+            }}>
+              {[16, 24, 36, 48].map(size => (
+                <button
+                  key={size}
+                  onClick={() => handlePageSize(size)}
+                  style={{
+                    padding: '4px 9px',
+                    borderRadius: 6,
+                    border: 'none',
+                    fontSize: 14,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    background: pageSize === size
+                      ? 'linear-gradient(135deg, rgba(255,255,255,0.14) 0%, rgba(255,255,255,0.09) 100%)'
+                      : 'transparent',
+                    color: pageSize === size ? 'var(--text-primary)' : 'var(--text-tertiary)',
+                    transition: 'all 140ms ease',
+                  }}
+                >
+                  {size}
+                </button>
+              ))}
+            </div>
+          )}
+
           {/* View mode toggle */}
           <div style={{
             display: 'flex',
-            background: 'var(--surface-el)',
-            border: '1px solid var(--border)',
+            background: 'linear-gradient(135deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.04) 100%)',
+            border: '0.5px solid rgba(255,255,255,0.13)',
+            backdropFilter: 'blur(16px) saturate(160%)',
+            WebkitBackdropFilter: 'blur(16px) saturate(160%)',
             borderRadius: 8,
             padding: 2,
           }}>
             {(['grid', 'list'] as const).map(mode => (
               <button
                 key={mode}
+                className={`lt-view-toggle-btn${viewMode === mode ? ' active' : ''}`}
                 onClick={() => setViewMode(mode)}
-                style={{
-                  width: 28,
-                  height: 26,
-                  borderRadius: 6,
-                  border: 'none',
-                  background: viewMode === mode ? 'var(--surface)' : 'transparent',
-                  color: viewMode === mode ? 'var(--text-primary)' : 'var(--text-tertiary)',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  transition: 'all 0.15s ease',
-                }}
               >
                 {mode === 'grid' ? (
                   <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
@@ -196,9 +408,11 @@ export default function Channel() {
 
       {/* Content */}
       <div style={{
+        position: 'relative',
+        zIndex: 1,
         flex: 1,
         overflowY: 'auto',
-        padding: '24px',
+        padding: '44px',
       }}>
         {sortedVideos.length === 0 ? (
           <div style={{
@@ -210,27 +424,47 @@ export default function Channel() {
             gap: 12,
           }}>
             <div style={{
-              width: 64,
-              height: 64,
-              borderRadius: 18,
+              width: 96,
+              height: 96,
+              borderRadius: 26,
               background: 'var(--surface)',
               border: '1px solid var(--border)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
             }}>
-              <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+              <svg width="44" height="44" viewBox="0 0 28 28" fill="none">
                 <rect x="2" y="4" width="24" height="20" rx="3.5" stroke="var(--text-tertiary)" strokeWidth="1.5" fill="none" />
                 <polygon points="11,10 21,14 11,18" fill="var(--text-tertiary)" />
               </svg>
             </div>
-            <h2 style={{ fontSize: 16 }}>No videos in {channel.displayName}</h2>
-            <p style={{ fontSize: 13, color: 'var(--text-secondary)', textAlign: 'center', maxWidth: 260 }}>
-              {isEditor
-                ? 'Add YouTube video URLs to start downloading.'
-                : 'Videos will appear here when they\'re added.'}
+            <h2 style={{ fontSize: 30 }}>No videos in {channel.displayName}</h2>
+            <p style={{ fontSize: 18, color: 'var(--text-secondary)', textAlign: 'center', maxWidth: 380 }}>
+              {isSyncing
+                ? 'Fetching video list from YouTube…'
+                : channel.type === 'source' && isEditor
+                  ? 'Hit Sync to pull the latest videos from this YouTube channel, or add individual URLs below.'
+                  : channel.type === 'source'
+                    ? 'Videos will appear here once synced.'
+                    : isEditor
+                      ? 'Add YouTube video URLs to start downloading.'
+                      : 'Videos will appear here when they\'re added.'}
             </p>
-            {isEditor && (
+            {isEditor && channel.type === 'source' && !isSyncing && (
+              <button
+                className="lt-btn-primary"
+                onClick={() => send({ type: 'syncChannel', payload: { channelId: channel.id } })}
+                style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}
+              >
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                  <path d="M1.5 7A5.5 5.5 0 0 1 12 4M12.5 7A5.5 5.5 0 0 1 2 10" stroke="white" strokeWidth="1.6" strokeLinecap="round" />
+                  <path d="M10 2L12 4L10 6" stroke="white" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                  <path d="M4 8L2 10L4 12" stroke="white" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                Sync Channel
+              </button>
+            )}
+            {isEditor && channel.type !== 'source' && (
               <button
                 className="lt-btn-primary"
                 onClick={() => setShowAddVideos(true)}
@@ -241,23 +475,58 @@ export default function Channel() {
             )}
           </div>
         ) : viewMode === 'grid' ? (
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-            gap: 14,
-          }}>
-            {sortedVideos.map(video => (
-              <VideoCard
-                key={video.id}
-                video={video}
-                isEditorMode={isEditor}
-                isActiveDownload={activeDownload?.videoId === video.id}
-                onPlay={() => send({ type: 'playVideo', payload: { videoId: video.id } })}
-                onDelete={isEditor ? () => handleDeleteVideo(video.id) : undefined}
-                onRetry={() => handleRetry(video.id)}
-              />
-            ))}
-          </div>
+          <>
+            <div data-video-grid style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+              gap: 22,
+            }}>
+              {pagedVideos.map(video => (
+                <div key={video.id} className="reveal">
+                  <VideoCard
+                    video={video}
+                    isEditorMode={isEditor}
+                    isActiveDownload={activeDownload?.videoId === video.id}
+                    onPlay={() => send({ type: 'playVideo', payload: { videoId: video.id } })}
+                    onDelete={isEditor ? () => handleDeleteVideo(video.id) : undefined}
+                    onRetry={() => handleRetry(video.id)}
+                  />
+                </div>
+              ))}
+            </div>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 10,
+                marginTop: 44,
+                paddingBottom: 8,
+              }}>
+                <button
+                  className="lt-btn-secondary"
+                  onClick={() => setCurrentPage(p => Math.max(0, p - 1))}
+                  disabled={currentPage === 0}
+                  style={{ padding: '8px 20px', fontSize: 16, opacity: currentPage === 0 ? 0.35 : 1 }}
+                >
+                  ← Prev
+                </button>
+                <span style={{ fontSize: 16, color: 'var(--text-secondary)', minWidth: 100, textAlign: 'center' }}>
+                  {currentPage + 1} / {totalPages}
+                </span>
+                <button
+                  className="lt-btn-secondary"
+                  onClick={() => setCurrentPage(p => Math.min(totalPages - 1, p + 1))}
+                  disabled={currentPage === totalPages - 1}
+                  style={{ padding: '8px 20px', fontSize: 16, opacity: currentPage === totalPages - 1 ? 0.35 : 1 }}
+                >
+                  Next →
+                </button>
+              </div>
+            )}
+          </>
         ) : (
           // List view
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -278,12 +547,12 @@ export default function Channel() {
 
       {/* Delete channel confirm modal */}
       {showDeleteConfirm && (
-        <div className="modal-backdrop">
-          <div className="modal-panel" style={{ width: 360, padding: '32px 28px' }}>
+        <div className="modal-backdrop" role="presentation">
+          <div className="modal-panel" role="dialog" aria-modal="true" aria-label="Confirm delete channel" style={{ width: 480, padding: '44px 40px' }}>
             <div style={{
-              width: 52,
-              height: 52,
-              borderRadius: 16,
+              width: 72,
+              height: 72,
+              borderRadius: 20,
               background: 'rgba(248,113,113,0.1)',
               border: '1px solid rgba(248,113,113,0.25)',
               display: 'flex',
@@ -291,13 +560,13 @@ export default function Channel() {
               justifyContent: 'center',
               marginBottom: 16,
             }}>
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none">
                 <path d="M3 6H21M8 6V4H16V6M10 11V17M14 11V17" stroke="#f87171" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                 <path d="M5 6L6 20H18L19 6" stroke="#f87171" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </div>
-            <h2 style={{ fontSize: 17, marginBottom: 8 }}>Delete "{channel.displayName}"?</h2>
-            <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 24 }}>
+            <h2 style={{ fontSize: 26, marginBottom: 8 }}>Delete "{channel.displayName}"?</h2>
+            <p style={{ fontSize: 18, color: 'var(--text-secondary)', marginBottom: 24 }}>
               This will remove the channel and all its videos from LocalTube. Downloaded files will also be deleted.
             </p>
             <div style={{ display: 'flex', gap: 10 }}>
@@ -322,12 +591,12 @@ export default function Channel() {
 
       {/* Add videos modal */}
       {showAddVideos && (
-        <div className="modal-backdrop">
-          <div className="modal-panel" style={{ width: 480, padding: '28px' }}>
+        <div className="modal-backdrop" role="presentation">
+          <div className="modal-panel" role="dialog" aria-modal="true" aria-label="Add videos" style={{ width: 600, padding: '40px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
               <div>
-                <h2 style={{ fontSize: 17, marginBottom: 4 }}>Add Videos</h2>
-                <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                <h2 style={{ fontSize: 26, marginBottom: 4 }}>Add Videos</h2>
+                <p style={{ fontSize: 18, color: 'var(--text-secondary)' }}>
                   Paste YouTube URLs, one per line.
                 </p>
               </div>
@@ -347,7 +616,7 @@ export default function Channel() {
               onChange={e => setUrlInput(e.target.value)}
               placeholder={"https://youtube.com/watch?v=...\nhttps://youtube.com/watch?v=..."}
               rows={8}
-              style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13 }}
+              style={{ fontFamily: 'ui-monospace, monospace', fontSize: 17 }}
             />
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 16 }}>
               <button
@@ -388,6 +657,7 @@ function VideoListRow({
   onRetry?: () => void
 }) {
   const [hovered, setHovered] = useState(false)
+  const [deleteBtnHovered, setDeleteBtnHovered] = useState(false)
   const isReady = video.downloadState === 'ready'
   const isDownloading = video.downloadState === 'downloading' || isActiveDownload
   const isQueued = video.downloadState === 'queued'
@@ -416,7 +686,7 @@ function VideoListRow({
         borderRadius: 10,
         background: hovered ? 'var(--surface)' : 'transparent',
         cursor: isReady ? 'pointer' : 'default',
-        transition: 'background 0.1s ease',
+        transition: 'background 140ms cubic-bezier(0.89,0,0.14,1)',
       }}
     >
       {/* Thumbnail */}
@@ -430,11 +700,9 @@ function VideoListRow({
         position: 'relative',
       }}>
         {video.thumbnailPath && (
-          <img
-            src={`localtube-thumb://${video.thumbnailPath}`}
-            alt=""
+          <Thumb
+            video={video}
             style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
           />
         )}
         {duration && (
@@ -493,22 +761,16 @@ function VideoListRow({
         )}
         {isError && (
           <button
+            className="lt-btn-retry"
             onClick={(e) => { e.stopPropagation(); onRetry?.() }}
-            style={{
-              fontSize: 11,
-              color: 'var(--destructive)',
-              background: 'rgba(248,113,113,0.1)',
-              border: '1px solid rgba(248,113,113,0.25)',
-              borderRadius: 5,
-              padding: '2px 7px',
-              cursor: 'pointer',
-            }}
           >
             Retry
           </button>
         )}
-        {isEditorMode && hovered && onDelete && (
+        {isEditorMode && onDelete && (
           <button
+            onMouseEnter={() => setDeleteBtnHovered(true)}
+            onMouseLeave={() => setDeleteBtnHovered(false)}
             onClick={(e) => { e.stopPropagation(); onDelete() }}
             style={{
               display: 'flex',
@@ -517,10 +779,14 @@ function VideoListRow({
               width: 26,
               height: 26,
               borderRadius: 6,
-              border: '1px solid rgba(248,113,113,0.3)',
-              background: 'rgba(248,113,113,0.1)',
+              border: `1px solid ${deleteBtnHovered ? 'rgba(248,113,113,0.55)' : 'rgba(248,113,113,0.3)'}`,
+              background: deleteBtnHovered ? 'rgba(248,113,113,0.22)' : 'rgba(248,113,113,0.1)',
               color: 'var(--destructive)',
               cursor: 'pointer',
+              opacity: hovered ? 1 : 0,
+              transform: hovered ? 'scale(1)' : 'scale(0.8)',
+              transition: 'opacity 140ms cubic-bezier(0.89,0,0.14,1), transform 180ms cubic-bezier(0.89,0,0.14,1), background 120ms cubic-bezier(0.89,0,0.14,1), border-color 120ms cubic-bezier(0.89,0,0.14,1)',
+              pointerEvents: hovered ? 'auto' : 'none',
             }}
           >
             <svg width="11" height="11" viewBox="0 0 11 11" fill="none">

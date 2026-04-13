@@ -31,10 +31,12 @@ enum ChannelResolverService {
         let channelId = (obj["channel_id"] as? String)
             ?? (obj["id"] as? String)
             ?? ""
-        let displayName = (obj["uploader"] as? String)
+        let rawName = (obj["uploader"] as? String)
             ?? (obj["channel"] as? String)
             ?? (obj["title"] as? String)
             ?? "Unknown Channel"
+        // Decode residual HTML entities that yt-dlp can leave in channel names
+        let displayName = rawName.htmlEntityDecoded
 
         guard !channelId.isEmpty else {
             throw ChannelResolverError.notAChannel

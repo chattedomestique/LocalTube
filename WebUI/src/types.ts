@@ -12,6 +12,7 @@ export interface Video {
   title: string
   localFilePath: string
   thumbnailPath: string
+  thumbnailVersion: number
   downloadedAt: string
   durationSeconds: number
   resumePositionSeconds: number
@@ -30,6 +31,7 @@ export interface Channel {
   folderName: string
   sortOrder: number
   createdAt: string
+  bannerPath?: string
 }
 
 export interface AppSettings {
@@ -60,12 +62,14 @@ export interface AppState {
     title: string
   }
   editorRemainingSeconds: number
+  syncingChannelIds: string[]
 }
 
 // ─── Bridge Events (Swift → JS) ────────────────────────────────────────────
 export type BridgeEvent =
   | { type: 'stateUpdate';       payload: Partial<AppState> }
   | { type: 'downloadProgress';  payload: { videoId: string; progress: number } }
+  | { type: 'downloadProgressBatch'; payload: Record<string, number> }
   | { type: 'downloadCompleted'; payload: { videoId: string } }
   | { type: 'downloadError';     payload: { videoId: string; error: string } }
   | { type: 'folderSelected';    payload: { path: string } }
@@ -91,6 +95,8 @@ export type BridgeMessage =
   | { type: 'retryDownload';    payload: { videoId: string } }
   | { type: 'saveSettings';     payload: AppSettings }
   | { type: 'checkDependencies' }
+  | { type: 'syncChannel';         payload: { channelId: string } }
+  | { type: 'uploadChannelBanner'; payload: { channelId: string } }
 
 // ─── Navigation ────────────────────────────────────────────────────────────
 export type NavScreen = 'library' | 'channel' | 'settings' | 'editor'

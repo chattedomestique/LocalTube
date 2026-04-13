@@ -29,10 +29,13 @@ export default function PINEntry() {
     return () => setOnPINValidated(undefined)
   }, [setOnPINValidated])
 
-  // Auto-submit when 4 digits are entered
+  // C5 fix: Auto-submit when 4 digits are entered, then immediately
+  // clear the PIN from component state to minimize exposure.
   useEffect(() => {
     if (pin.length === 4) {
-      send({ type: 'validatePIN', payload: { pin } })
+      const pinValue = pin
+      setPin('')
+      send({ type: 'validatePIN', payload: { pin: pinValue } })
     }
   }, [pin, send])
 
@@ -61,9 +64,12 @@ export default function PINEntry() {
   }
 
   return (
-    <div className="modal-backdrop">
+    <div className="modal-backdrop" role="presentation">
       <div
         className={`modal-panel ${shaking ? 'shake' : ''}`}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Enter PIN"
         style={{
           width: 360,
           padding: '40px 36px',
@@ -154,7 +160,7 @@ export default function PINEntry() {
           {/* Hidden input */}
           <input
             ref={inputRef}
-            type="number"
+            type="text"
             inputMode="numeric"
             pattern="[0-9]*"
             style={{

@@ -141,6 +141,85 @@ private struct ResumePromptOverlay: View {
     }
 }
 
+// MARK: - Glass Button Helpers
+
+/// Circular glass-morphism transport button with hover + press states.
+private struct GlassCircleButton: View {
+    let icon: String
+    let fontSize: CGFloat
+    let size: CGFloat
+    let action: () -> Void
+
+    @State private var isHovered = false
+    @State private var isPressed = false
+
+    var body: some View {
+        ZStack {
+            Circle().fill(.ultraThinMaterial)
+            Circle().fill(Color.white.opacity(isPressed ? 0.38 : isHovered ? 0.26 : 0.16))
+            Circle().strokeBorder(Color.white.opacity(isHovered ? 0.50 : 0.24), lineWidth: 1)
+            Image(systemName: icon)
+                .font(.system(size: fontSize, weight: .semibold))
+                .foregroundStyle(Color.white)
+        }
+        .frame(width: size, height: size)
+        .scaleEffect(isPressed ? 0.88 : isHovered ? 1.06 : 1.0)
+        .shadow(color: .black.opacity(isHovered ? 0.55 : 0.4),
+                radius: isHovered ? 28 : 16, y: isHovered ? 8 : 4)
+        .animation(isPressed ? .easeOut(duration: 0.09)
+                             : .spring(response: 0.3, dampingFraction: 0.7),
+                   value: isHovered)
+        .animation(.easeOut(duration: 0.09), value: isPressed)
+        .onHover { isHovered = $0 }
+        .onTapGesture { action() }
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { _ in isPressed = true }
+                .onEnded   { _ in isPressed = false }
+        )
+    }
+}
+
+/// Rounded-rect glass back button (matches React BackButton).
+private struct GlassBackButton: View {
+    let action: () -> Void
+
+    @State private var isHovered = false
+    @State private var isPressed = false
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 10).fill(.ultraThinMaterial)
+            RoundedRectangle(cornerRadius: 10)
+                .fill(Color.white.opacity(isPressed ? 0.28 : isHovered ? 0.18 : 0.08))
+            RoundedRectangle(cornerRadius: 10)
+                .strokeBorder(Color.white.opacity(isHovered ? 0.36 : 0.14), lineWidth: 1)
+            HStack(spacing: 5) {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 13, weight: .semibold))
+                Text("Back")
+                    .font(.system(size: 15, weight: .semibold))
+            }
+            .foregroundStyle(Color.white)
+        }
+        .frame(width: 88, height: 36)
+        .scaleEffect(isPressed ? 0.88 : isHovered ? 1.06 : 1.0)
+        .shadow(color: .black.opacity(0.4),
+                radius: isHovered ? 14 : 2, y: isHovered ? 4 : 1)
+        .animation(isPressed ? .easeOut(duration: 0.09)
+                             : .spring(response: 0.3, dampingFraction: 0.7),
+                   value: isHovered)
+        .animation(.easeOut(duration: 0.09), value: isPressed)
+        .onHover { isHovered = $0 }
+        .onTapGesture { action() }
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { _ in isPressed = true }
+                .onEnded   { _ in isPressed = false }
+        )
+    }
+}
+
 // MARK: - Player Controls Overlay
 
 struct PlayerControlsOverlay: View {
@@ -152,63 +231,89 @@ struct PlayerControlsOverlay: View {
             // Gradient scrims (top + bottom)
             VStack {
                 LinearGradient(
-                    colors: [Color.black.opacity(0.7), Color.clear],
+                    colors: [Color.black.opacity(0.72), Color.black.opacity(0.48),
+                             Color.black.opacity(0.18), Color.clear],
                     startPoint: .top, endPoint: .bottom
                 )
-                .frame(height: 140)
+                .frame(height: 160)
                 Spacer()
                 LinearGradient(
-                    colors: [Color.clear, Color.black.opacity(0.7)],
+                    colors: [Color.clear, Color.black.opacity(0.22),
+                             Color.black.opacity(0.52), Color.black.opacity(0.75)],
                     startPoint: .top, endPoint: .bottom
                 )
-                .frame(height: 180)
+                .frame(height: 170)
             }
             .ignoresSafeArea()
             .opacity(playerState.controlsVisible ? 1 : 0)
 
-            // Top bar: Back + Title + Loop
+            // Top bar: Back + Title
             VStack {
-                HStack(alignment: .center, spacing: 0) {
-                    backButton
-                    Spacer()
+                HStack(alignment: .center, spacing: 14) {
+                    GlassBackButton(action: onBack)
                     if let title = playerState.currentVideo?.title {
                         Text(title)
-                            .font(.ltHeadline)
-                            .foregroundStyle(Color.ltText)
+                            .font(.system(size: 22, weight: .semibold))
+                            .foregroundStyle(Color.white)
                             .lineLimit(1)
-                            .padding(.horizontal, 20)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    Spacer()
-                    loopButton
                 }
-                .padding(.horizontal, 32)
-                .padding(.top, 24)
+                .padding(.horizontal, 48)
+                .padding(.top, 40)
                 Spacer()
             }
             .opacity(playerState.controlsVisible ? 1 : 0)
 
             // Center: Skip / Play / Skip
-            HStack(spacing: 48) {
-                skipButton(seconds: -10, icon: "gobackward.10")
-                playPauseButton
-                skipButton(seconds: 10, icon: "goforward.10")
+            HStack(spacing: 44) {
+                GlassCircleButton(icon: "gobackward.10", fontSize: 22, size: 66) {
+                    playerState.skip(seconds: -10)
+                }
+                GlassCircleButton(
+                    icon: playerState.isPlaying ? "pause.fill" : "play.fill",
+                    fontSize: 34, size: 84
+                ) {
+                    playerState.togglePlayPause()
+                }
+                GlassCircleButton(icon: "goforward.10", fontSize: 22, size: 66) {
+                    playerState.skip(seconds: 10)
+                }
             }
             .opacity(playerState.controlsVisible ? 1 : 0)
 
-            // Bottom: Progress + Volume
+            // Bottom: Scrub bar + time labels + volume
             VStack {
                 Spacer()
                 VStack(spacing: 16) {
                     progressBar
-                    volumeBar
+                    HStack(spacing: 12) {
+                        Image(systemName: "speaker.fill")
+                            .font(.system(size: 18))
+                            .foregroundStyle(Color.white.opacity(0.6))
+                        Slider(
+                            value: Binding(
+                                get: { Double(playerState.player.volume) },
+                                set: { playerState.setVolume(Float($0)) }
+                            ),
+                            in: 0...1
+                        )
+                        .tint(Color.ltAccent)
+                        .frame(maxWidth: 200)
+                        Image(systemName: "speaker.wave.3.fill")
+                            .font(.system(size: 18))
+                            .foregroundStyle(Color.white.opacity(0.6))
+                        Spacer()
+                        loopButton
+                    }
                 }
-                .padding(.horizontal, 40)
+                .padding(.horizontal, 48)
                 .padding(.bottom, 40)
             }
             .opacity(playerState.controlsVisible ? 1 : 0)
         }
         .animation(
-            NSWorkspace.shared.shouldReduceMotion ? nil : .easeInOut(duration: 0.25),
+            NSWorkspace.shared.shouldReduceMotion ? nil : .easeInOut(duration: 0.4),
             value: playerState.controlsVisible
         )
         .contentShape(Rectangle())
@@ -216,52 +321,17 @@ struct PlayerControlsOverlay: View {
         .onHover { if $0 { playerState.showControls() } }
     }
 
-    // MARK: - Buttons
-
-    private var backButton: some View {
-        Button(action: onBack) {
-            HStack(spacing: 8) {
-                Image(systemName: "chevron.left").font(.system(size: 22, weight: .semibold))
-                Text("Back").font(.ltHeadline)
-            }
-            .foregroundStyle(Color.ltText)
-        }
-        .buttonStyle(.plain)
-        .frame(minWidth: LT.minTargetSize, minHeight: LT.minTargetSize)
-        .accessibilityLabel("Back to library")
-    }
+    // MARK: - Loop Button
 
     private var loopButton: some View {
         Button { playerState.toggleLoop() } label: {
             Image(systemName: playerState.isLooping ? "repeat.1" : "repeat")
-                .font(.system(size: LT.sfSymbolSize * 0.7))
-                .foregroundStyle(playerState.isLooping ? Color.ltAccent : Color.ltTextSecondary)
+                .font(.system(size: 18, weight: .medium))
+                .foregroundStyle(playerState.isLooping ? Color.ltAccent : Color.white.opacity(0.6))
         }
         .buttonStyle(.plain)
-        .frame(width: LT.minTargetSize, height: LT.minTargetSize)
+        .frame(width: 36, height: 36)
         .accessibilityLabel(playerState.isLooping ? "Loop on" : "Loop off")
-    }
-
-    private var playPauseButton: some View {
-        Button { playerState.togglePlayPause() } label: {
-            Image(systemName: playerState.isPlaying ? "pause.fill" : "play.fill")
-                .font(.system(size: 64))
-                .foregroundStyle(Color.ltText)
-        }
-        .buttonStyle(.plain)
-        .frame(width: LT.minTargetSize * 1.2, height: LT.minTargetSize * 1.2)
-        .accessibilityLabel(playerState.isPlaying ? "Pause" : "Play")
-    }
-
-    private func skipButton(seconds: Double, icon: String) -> some View {
-        Button { playerState.skip(seconds: seconds) } label: {
-            Image(systemName: icon)
-                .font(.system(size: LT.sfSymbolSize))
-                .foregroundStyle(Color.ltText)
-        }
-        .buttonStyle(.plain)
-        .frame(width: LT.minTargetSize, height: LT.minTargetSize)
-        .accessibilityLabel(seconds < 0 ? "Skip back 10 seconds" : "Skip forward 10 seconds")
     }
 
     // MARK: - Progress Bar
@@ -270,14 +340,16 @@ struct PlayerControlsOverlay: View {
         VStack(spacing: 8) {
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
-                    Capsule().fill(Color.ltTextTertiary.opacity(0.5)).frame(height: 6)
+                    Capsule()
+                        .fill(Color.white.opacity(0.28))
+                        .frame(height: 4)
                     Capsule()
                         .fill(Color.ltAccent)
                         .frame(
                             width: playerState.duration > 0
                                 ? geo.size.width * CGFloat(playerState.currentTime / playerState.duration)
                                 : 0,
-                            height: 6
+                            height: 4
                         )
                 }
                 .contentShape(Rectangle())
@@ -288,33 +360,17 @@ struct PlayerControlsOverlay: View {
                     }
                 )
             }
-            .frame(height: 6)
+            .frame(height: 28)
 
             HStack {
                 Text(DurationFormatter.format(seconds: playerState.currentTime))
-                    .font(.ltCaption).foregroundStyle(Color.ltTextSecondary)
+                    .font(.system(size: 20, weight: .medium).monospacedDigit())
+                    .foregroundStyle(Color.white.opacity(0.9))
                 Spacer()
                 Text(DurationFormatter.format(seconds: playerState.duration))
-                    .font(.ltCaption).foregroundStyle(Color.ltTextSecondary)
+                    .font(.system(size: 20, weight: .medium).monospacedDigit())
+                    .foregroundStyle(Color.white.opacity(0.9))
             }
-        }
-    }
-
-    // MARK: - Volume Bar
-
-    private var volumeBar: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "speaker.fill").font(.system(size: 20)).foregroundStyle(Color.ltTextSecondary)
-            Slider(
-                value: Binding(
-                    get: { Double(playerState.player.volume) },
-                    set: { playerState.setVolume(Float($0)) }
-                ),
-                in: 0...1
-            )
-            .tint(Color.ltAccent)
-            .frame(maxWidth: 200)
-            Image(systemName: "speaker.wave.3.fill").font(.system(size: 20)).foregroundStyle(Color.ltTextSecondary)
         }
     }
 }

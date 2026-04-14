@@ -1,73 +1,49 @@
 import AppKit
 import AVKit
 import AVFoundation
-import WebKit
 import Foundation
 
 // MARK: - Player Overlay Controller
 //
-// Manages an NSPanel that floats above the WKWebView as a child window.
-// The panel has two layers:
-//
-//   1. AVPlayerView  (bottom) — native video rendering via AVKit
-//   2. WKWebView     (top)    — transparent React overlay (PlayerScreen.tsx)
-//                               loaded with window.__playerMode = true so
-//                               main.tsx renders PlayerScreen instead of App
-//
-// Swift pushes player state (time, duration, title, isPlaying) to React via
-// window.LocalTubePlayer.dispatch(), and React sends commands back
-// (toggle, seekBack, seekForward, seek, close) via the LocalTubePlayer
-// WKScriptMessageHandler.
+// Manages an NSPanel that floats above the WKWebView as a child window,
+// hosting the native AVPlayerView. This approach keeps AVKit's internal
+// layer tree completely separate from WKWebView's rendering pipeline —
+// the two views never share a parent NSView, preventing layer composition issues.
 
 @MainActor
 final class PlayerOverlayController {
 
     private(set) var playerPanel: NSPanel?
     private var playerState: PlayerState?
-    private var playerWebView: WKWebView?
     weak var parentWindow: NSWindow?
     weak var emitter: BridgeEventEmitter?
-
-    /// Called when the player panel is dismissed (back button or video end).
-    var onDismiss: (() -> Void)?
 
     // MARK: - Show / Hide
 
     func show(video: Video, appState: AppState) {
         guard video.isPlayable else { return }
 
+        // Re-use existing panel if present, otherwise create fresh
         let panel: NSPanel
         let state: PlayerState
-        let webView: WKWebView
 
-        if let existingPanel = playerPanel,
-           let existingState = playerState,
-           let existingWeb   = playerWebView {
-            panel   = existingPanel
-            state   = existingState
-            webView = existingWeb
+        if let existing = playerPanel, let existingState = playerState {
+            panel = existing
+            state = existingState
         } else {
-            let built = buildPanel()
-            playerPanel   = built.panel
-            playerState   = built.state
-            playerWebView = built.webView
-            panel   = built.panel
-            state   = built.state
-            webView = built.webView
+            let (p, s) = buildPanel()
+            playerPanel = p
+            playerState = s
+            state = s
+            panel = p
         }
 
         state.appState = appState
 
-        // Wire state changes → push to React UI
-        state.onStateChanged = { [weak self] in
-            self?.pushPlayerState()
-        }
-
-        // Size panel to the content area only (below the title bar) so the
-        // title bar stays exposed and the window remains draggable.
-        if let parent = parentWindow, let contentView = parent.contentView {
-            let contentScreenFrame = parent.convertToScreen(contentView.frame)
-            panel.setFrame(contentScreenFrame, display: false)
+        // Size the panel to match the parent window's content area
+        if let parent = parentWindow {
+            let frame = parent.contentView?.window?.frame ?? parent.frame
+            panel.setFrame(frame, display: false)
             let alreadyChild = parent.childWindows?.contains { $0 === panel } ?? false
             if !alreadyChild {
                 parent.addChildWindow(panel, ordered: .above)
@@ -75,11 +51,13 @@ final class PlayerOverlayController {
         }
 
         panel.makeKeyAndOrderFront(nil)
-        panel.makeFirstResponder(webView)
-
+        // Use saved position only if > 10 s in; otherwise restart from beginning.
+        // The full resume-or-restart prompt is handled by VideoPlayerView in the
+        // SwiftUI path; this bridge path applies the same threshold silently.
         let startSeconds = video.resumePositionSeconds > 10 ? video.resumePositionSeconds : 0
         state.play(video: video, startSeconds: startSeconds)
 
+        // Observe player stop to auto-hide
         observePlayerStop(state: state)
     }
 
@@ -88,138 +66,43 @@ final class PlayerOverlayController {
         dismiss()
     }
 
-    // MARK: - State → React bridge
+    // MARK: - Private
 
-    private func pushPlayerState() {
-        guard let state = playerState, let webView = playerWebView else { return }
-        let payload: [String: Any] = [
-            "isPlaying":   state.isPlaying,
-            "currentTime": state.currentTime,
-            "duration":    state.duration,
-            "title":       state.currentVideo?.title ?? "",
-        ]
-        guard let data = try? JSONSerialization.data(withJSONObject: payload),
-              let json = String(data: data, encoding: .utf8) else { return }
-        let js = """
-        if (window.LocalTubePlayer) {
-            window.LocalTubePlayer.dispatch({ type: 'playerState', payload: \(json) });
-        }
-        """
-        webView.evaluateJavaScript(js, in: nil, in: .page) { _ in }
-    }
-
-    // MARK: - Panel construction
-
-    private func buildPanel() -> (panel: NSPanel, state: PlayerState, webView: WKWebView) {
-        // ── NSPanel ──────────────────────────────────────────────────────────
+    private func buildPanel() -> (NSPanel, PlayerState) {
         let panel = NSPanel(
             contentRect: NSRect(x: 0, y: 0, width: 1280, height: 720),
             styleMask:   [.borderless, .nonactivatingPanel],
             backing:     .buffered,
             defer:       false
         )
-        panel.isOpaque                   = true
-        panel.backgroundColor            = .black
-        panel.level                      = .floating
-        panel.collectionBehavior         = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        panel.isOpaque = true
+        panel.backgroundColor = .black
+        panel.level = .floating
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.isMovableByWindowBackground = false
-        panel.hidesOnDeactivate          = false
+        panel.hidesOnDeactivate = false
 
-        // ── PlayerState ──────────────────────────────────────────────────────
         let state = PlayerState()
 
-        // ── AVPlayerView (bottom layer — actual video) ───────────────────────
+        // Build the SwiftUI-equivalent player UI using AppKit directly so we avoid
+        // another SwiftUI scene lifecycle. AVPlayerView + overlay controls view.
         let avView = AVPlayerView()
-        avView.player        = state.player
+        avView.player = state.player
         avView.controlsStyle = .none
-        avView.videoGravity  = .resizeAspect
+        avView.videoGravity = .resizeAspect
         avView.translatesAutoresizingMaskIntoConstraints = false
 
-        // ── WKWebView (top layer — transparent React controls) ───────────────
-        let config = WKWebViewConfiguration()
-        config.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
-
-        // Inject __playerMode flag + LocalTubePlayer bridge before React mounts.
-        // main.tsx reads window.__playerMode at startup and renders <PlayerScreen>
-        // instead of <App> when it's true.
-        let bridgeJS = """
-        window.__playerMode = true;
-        window.LocalTubePlayer = {
-            _handlers: {},
-            on: function(event, fn) {
-                if (!this._handlers[event]) this._handlers[event] = [];
-                this._handlers[event].push(fn);
-            },
-            dispatch: function(evt) {
-                var handlers = this._handlers[evt.type] || [];
-                for (var i = 0; i < handlers.length; i++) {
-                    try { handlers[i](evt.payload); } catch(e) {}
-                }
-            },
-            send: function(msg) {
-                try {
-                    window.webkit.messageHandlers.LocalTubePlayer.postMessage(msg);
-                } catch(e) {}
-            }
-        };
-        """
-        config.userContentController.addUserScript(
-            WKUserScript(source: bridgeJS, injectionTime: .atDocumentStart, forMainFrameOnly: true)
-        )
-
-        // Isolated handler class avoids retain cycle: WKUserContentController
-        // holds the handler strongly; if PlayerOverlayController were the handler
-        // it would be retained indefinitely and leak the whole panel.
-        let commandHandler = PlayerCommandHandler { [weak self] command, value in
-            guard let self else { return }
-            switch command {
-            case "playerReady":
-                // React mounted — push current state immediately so UI is in sync
-                self.pushPlayerState()
-            case "toggle":
-                self.playerState?.togglePlayPause()
-            case "seekBack":
-                self.playerState?.skip(seconds: -10)
-            case "seekForward":
-                self.playerState?.skip(seconds: 10)
-            case "seek":
-                // value is 0–1 fractional progress
-                if let fraction = value,
-                   let dur = self.playerState?.duration,
-                   let cur = self.playerState?.currentTime {
-                    self.playerState?.skip(seconds: fraction * dur - cur)
-                }
-            case "close":
-                self.hide()
-            default:
-                break
-            }
+        let overlay = PlayerOverlayView(playerState: state) { [weak self] in
+            self?.hide()
         }
-        config.userContentController.add(commandHandler, name: "LocalTubePlayer")
+        overlay.translatesAutoresizingMaskIntoConstraints = false
 
-        let webView = WKWebView(frame: .zero, configuration: config)
-        webView.setValue(false, forKey: "drawsBackground")   // transparent over video
-        webView.allowsBackForwardNavigationGestures = false
-        webView.translatesAutoresizingMaskIntoConstraints = false
-
-        // Load the same React bundle the main window uses
-        if let resourceURL = Bundle.main.resourceURL {
-            let candidates: [URL] = [
-                resourceURL.appendingPathComponent("Resources/WebUI/index.html"),
-                resourceURL.appendingPathComponent("WebUI/index.html"),
-            ]
-            if let indexURL = candidates.first(where: { FileManager.default.fileExists(atPath: $0.path) }) {
-                webView.loadFileURL(indexURL, allowingReadAccessTo: indexURL.deletingLastPathComponent())
-            }
-        }
-
-        // ── Container ────────────────────────────────────────────────────────
         let container = NSView()
         container.wantsLayer = true
         container.layer?.backgroundColor = NSColor.black.cgColor
 
         container.addSubview(avView)
-        container.addSubview(webView)   // webView on top
+        container.addSubview(overlay)
 
         NSLayoutConstraint.activate([
             avView.topAnchor.constraint(equalTo: container.topAnchor),
@@ -227,19 +110,18 @@ final class PlayerOverlayController {
             avView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
             avView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
 
-            webView.topAnchor.constraint(equalTo: container.topAnchor),
-            webView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-            webView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            webView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            overlay.topAnchor.constraint(equalTo: container.topAnchor),
+            overlay.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            overlay.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            overlay.trailingAnchor.constraint(equalTo: container.trailingAnchor),
         ])
 
         panel.contentView = container
-        return (panel, state, webView)
+        return (panel, state)
     }
 
-    // MARK: - Private helpers
-
     private func observePlayerStop(state: PlayerState) {
+        // When video ends, dismiss automatically
         NotificationCenter.default.addObserver(
             forName: .AVPlayerItemDidPlayToEndTime,
             object: nil,
@@ -257,29 +139,173 @@ final class PlayerOverlayController {
             parent.removeChildWindow(panel)
             panel.orderOut(nil)
         }
-        onDismiss?()
     }
 }
 
-// MARK: - Player Command Handler
+// MARK: - Player Overlay View (AppKit)
 //
-// Separate NSObject subclass so WKUserContentController's strong retain of the
-// handler does not create a cycle back to PlayerOverlayController.
+// Simple AppKit view that shows player controls on top of AVPlayerView.
+// This is intentionally minimal — just back button, play/pause, skip.
 
-private final class PlayerCommandHandler: NSObject, WKScriptMessageHandler {
-    private let handler: @MainActor (String, Double?) -> Void
+final class PlayerOverlayView: NSView {
+    private let playerState: PlayerState
+    private let onBack: () -> Void
+    private var trackingArea: NSTrackingArea?
+    private var hideTimer: Timer?
 
-    init(handler: @escaping @MainActor (String, Double?) -> Void) {
-        self.handler = handler
+    private let backButton    = NSButton()
+    private let playButton    = NSButton()
+    private let skipBackBtn   = NSButton()
+    private let skipFwdBtn    = NSButton()
+    private let topGradient   = NSView()
+    private let bottomGradient = NSView()
+    private var controlsAlpha: CGFloat = 1.0
+
+    init(playerState: PlayerState, onBack: @escaping () -> Void) {
+        self.playerState = playerState
+        self.onBack      = onBack
+        super.init(frame: .zero)
+        setupUI()
     }
 
-    func userContentController(
-        _ userContentController: WKUserContentController,
-        didReceive message: WKScriptMessage
-    ) {
-        guard let body    = message.body as? [String: Any],
-              let command = body["command"] as? String else { return }
-        let value = body["value"] as? Double
-        Task { @MainActor in self.handler(command, value) }
+    required init?(coder: NSCoder) { fatalError() }
+
+    // MARK: - Setup
+
+    private func setupUI() {
+        wantsLayer = true
+        layer?.backgroundColor = NSColor.clear.cgColor
+
+        // Back button
+        backButton.title = "← Back"
+        backButton.bezelStyle = .inline
+        backButton.isBordered = false
+        backButton.contentTintColor = .white
+        backButton.font = NSFont.systemFont(ofSize: 16, weight: .semibold)
+        backButton.target = self
+        backButton.action = #selector(backTapped)
+        backButton.translatesAutoresizingMaskIntoConstraints = false
+
+        // Play/Pause
+        playButton.image = NSImage(systemSymbolName: "play.fill", accessibilityDescription: "Play")
+        playButton.contentTintColor = .white
+        playButton.isBordered = false
+        playButton.imageScaling = .scaleProportionallyDown
+        playButton.target = self
+        playButton.action = #selector(playTapped)
+        playButton.translatesAutoresizingMaskIntoConstraints = false
+        playButton.widthAnchor.constraint(equalToConstant: 64).isActive = true
+        playButton.heightAnchor.constraint(equalToConstant: 64).isActive = true
+
+        // Skip back
+        skipBackBtn.image = NSImage(systemSymbolName: "gobackward.10", accessibilityDescription: "Skip back 10s")
+        skipBackBtn.contentTintColor = .white
+        skipBackBtn.isBordered = false
+        skipBackBtn.target = self
+        skipBackBtn.action = #selector(skipBack)
+        skipBackBtn.translatesAutoresizingMaskIntoConstraints = false
+        skipBackBtn.widthAnchor.constraint(equalToConstant: 44).isActive = true
+        skipBackBtn.heightAnchor.constraint(equalToConstant: 44).isActive = true
+
+        // Skip forward
+        skipFwdBtn.image = NSImage(systemSymbolName: "goforward.10", accessibilityDescription: "Skip forward 10s")
+        skipFwdBtn.contentTintColor = .white
+        skipFwdBtn.isBordered = false
+        skipFwdBtn.target = self
+        skipFwdBtn.action = #selector(skipForward)
+        skipFwdBtn.translatesAutoresizingMaskIntoConstraints = false
+        skipFwdBtn.widthAnchor.constraint(equalToConstant: 44).isActive = true
+        skipFwdBtn.heightAnchor.constraint(equalToConstant: 44).isActive = true
+
+        let centerStack = NSStackView(views: [skipBackBtn, playButton, skipFwdBtn])
+        centerStack.spacing = 48
+        centerStack.translatesAutoresizingMaskIntoConstraints = false
+
+        addSubview(backButton)
+        addSubview(centerStack)
+
+        NSLayoutConstraint.activate([
+            backButton.topAnchor.constraint(equalTo: topAnchor, constant: 24),
+            backButton.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 32),
+
+            centerStack.centerXAnchor.constraint(equalTo: centerXAnchor),
+            centerStack.centerYAnchor.constraint(equalTo: centerYAnchor),
+        ])
+
+        scheduleHide()
+    }
+
+    // MARK: - Actions
+
+    @objc private func backTapped()    { onBack() }
+    @objc private func playTapped()    { Task { @MainActor in self.playerState.togglePlayPause(); self.updatePlayButton() } }
+    @objc private func skipBack()      { Task { @MainActor in self.playerState.skip(seconds: -10) } }
+    @objc private func skipForward()   { Task { @MainActor in self.playerState.skip(seconds:  10) } }
+
+    private func updatePlayButton() {
+        let name = playerState.isPlaying ? "pause.fill" : "play.fill"
+        playButton.image = NSImage(systemSymbolName: name, accessibilityDescription: nil)
+    }
+
+    // MARK: - Controls Visibility
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let t = trackingArea { removeTrackingArea(t) }
+        trackingArea = NSTrackingArea(
+            rect: bounds,
+            options: [.mouseMoved, .mouseEnteredAndExited, .activeInActiveApp],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(trackingArea!)
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        showControls()
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        showControls()
+    }
+
+    private func showControls() {
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.2
+            animator().alphaValue = 1
+        }
+        scheduleHide()
+    }
+
+    private func scheduleHide() {
+        hideTimer?.invalidate()
+        hideTimer = Timer.scheduledTimer(withTimeInterval: 4, repeats: false) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                NSAnimationContext.runAnimationGroup { ctx in
+                    ctx.duration = 0.4
+                    self?.animator().alphaValue = 0
+                }
+            }
+        }
+    }
+
+    // MARK: - Key events (Esc, Space, arrows)
+
+    override var acceptsFirstResponder: Bool { true }
+
+    override func keyDown(with event: NSEvent) {
+        Task { @MainActor in
+            switch event.keyCode {
+            case 53: onBack()                                    // Esc
+            case 49: playerState.togglePlayPause()              // Space
+            case 123: playerState.skip(seconds: -10)            // Left
+            case 124: playerState.skip(seconds:  10)            // Right
+            case 125: playerState.setVolume(playerState.player.volume - 0.1)  // Down
+            case 126: playerState.setVolume(playerState.player.volume + 0.1)  // Up
+            default: break
+            }
+            showControls()
+            updatePlayButton()
+        }
     }
 }

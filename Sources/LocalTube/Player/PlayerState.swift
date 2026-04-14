@@ -19,10 +19,6 @@ final class PlayerState {
     private var itemEndObserver: Any?
     weak var appState: AppState?   // internal so ViewerRootView can wire it post-init
 
-    /// Called on the main actor whenever playback state changes (time, play/pause, end).
-    /// PlayerOverlayController uses this to push state to the React player UI.
-    var onStateChanged: (@MainActor () -> Void)?
-
     init(appState: AppState? = nil) {
         self.appState = appState
         setupPlayer()
@@ -30,9 +26,11 @@ final class PlayerState {
 
     // MARK: - Playback
 
-    /// Play `video` starting at `startSeconds`. Pass 0 to start from the beginning,
-    /// or pass `video.resumePositionSeconds` to resume where the user left off.
-    func play(video: Video, startSeconds: Double = 0) {
+    /// Begin playback of `video` from an explicit position.
+    /// Pass `startSeconds: 0` to play from the beginning, or the saved
+    /// `video.resumePositionSeconds` to resume. The resume/start decision
+    /// is made by the caller (VideoPlayerView) based on the saved position.
+    func play(video: Video, startSeconds: Double) {
         guard video.isPlayable else { return }
         currentVideo = video
 
@@ -64,7 +62,6 @@ final class PlayerState {
 
             guard item.status == .readyToPlay else { return }
 
-            // Seek to the requested start position
             if startSeconds > 0 {
                 let time = CMTime(seconds: startSeconds, preferredTimescale: 600)
                 let tol  = CMTime(seconds: 1, preferredTimescale: 600)
@@ -83,7 +80,6 @@ final class PlayerState {
         }
         isPlaying.toggle()
         showControls()
-        onStateChanged?()
     }
 
     func skip(seconds: Double) {
@@ -100,9 +96,11 @@ final class PlayerState {
     }
 
     func stop() {
-        // Don't save position if the video finished — we'll reset it to 0 instead
-        let atEnd = duration > 0 && currentTime >= duration - 2
-        if !atEnd { saveResumePosition() }
+        // Don't save position if video played to end — it was already reset to 0
+        let pos = CMTimeGetSeconds(player.currentTime())
+        if duration <= 0 || pos < duration - 2 {
+            saveResumePosition()
+        }
         player.pause()
         player.replaceCurrentItem(with: nil)
         isPlaying = false
@@ -155,7 +153,6 @@ final class PlayerState {
             let seconds = CMTimeGetSeconds(time)
             Task { @MainActor in
                 self.currentTime = seconds
-                self.onStateChanged?()
                 // Save resume position every 5 seconds
                 if seconds > 0 && seconds.truncatingRemainder(dividingBy: 5) < 0.55 {
                     self.saveResumePosition()
@@ -176,8 +173,7 @@ final class PlayerState {
                     self.player.play()
                 } else {
                     self.isPlaying = false
-                    self.onStateChanged?()
-                    // Reset resume position so next play starts from beginning
+                    // Reset resume position so the video starts from the beginning next time
                     if let video = self.currentVideo {
                         self.appState?.updateResumePosition(videoId: video.id, seconds: 0)
                     }

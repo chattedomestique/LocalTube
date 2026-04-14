@@ -1,6 +1,5 @@
 import AppKit
 import Foundation
-import Sparkle
 
 // MARK: - App Delegate
 //
@@ -10,16 +9,10 @@ import Sparkle
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
 
-    private var appState: AppState?
-    private var windowController: WebWindowController?
+    // MARK: - Owned objects
 
-    // Sparkle updater — must be retained for the lifetime of the app.
-    // SUFeedURL in Info.plist tells Sparkle where to find the appcast.
-    private let updaterController = SPUStandardUpdaterController(
-        startingUpdater: true,
-        updaterDelegate: nil,
-        userDriverDelegate: nil
-    )
+    private var appState: AppState!
+    private var windowController: WebWindowController!
 
     // MARK: - Lifecycle
 
@@ -31,8 +24,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         AppLogger.info("LocalTube launched (PID \(ProcessInfo.processInfo.processIdentifier))")
 
         // Build app state
-        let state = AppState()
-        appState = state
+        appState = AppState()
 
         // Wire download service back-reference + load settings
         bootstrapAppState()
@@ -41,22 +33,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         buildMainMenu()
 
         // Create the WebView window (wires up bridge + player overlay)
-        let wc = WebWindowController(appState: state)
-        windowController = wc
+        windowController = WebWindowController(appState: appState)
 
         // Show the window and load the React UI
-        wc.window.makeKeyAndOrderFront(nil)
-        wc.loadWebUI()
+        windowController.window.makeKeyAndOrderFront(nil)
+        windowController.loadWebUI()
 
         // Async init: check dependencies + load library, then push state to JS
         Task {
-            if state.settings.checkDepsOnLaunch {
-                await state.dependencyService.checkAll()
-                state.dependencyStatus = state.dependencyService.status
+            if appState.settings.checkDepsOnLaunch {
+                await appState.dependencyService.checkAll()
+                appState.dependencyStatus = appState.dependencyService.status
             }
-            await state.loadLibrary()
+            await appState.loadLibrary()
             // After library is loaded, push full state to the WebView
-            wc.bridge.emitter.emitStateUpdate(state)
+            windowController.bridge.emitter.emitStateUpdate(appState)
+
         }
     }
 
@@ -78,18 +70,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func openSettings() {
+        // Only allow settings access from editor mode — tell the WebView to navigate
         guard let wc = windowController else { return }
         wc.bridge.emitter.emit("navigateTo", payload: ["screen": "settings"])
     }
 
     @objc private func toggleEditorMode() {
-        guard let appState, let wc = windowController else { return }
+        guard let appState else { return }
         if appState.appMode == .editor {
             appState.exitEditorMode()
         } else {
             appState.requestEditorMode()
         }
-        wc.bridge.emitter.emitStateUpdate(appState)
+        windowController.bridge.emitter.emitStateUpdate(appState)
     }
 
     @objc private func showWindow() {
@@ -111,10 +104,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
             .target = self
-        appMenu.addItem(withTitle: "Check for Updates…",
-                        action: #selector(SPUStandardUpdaterController.checkForUpdates(_:)),
-                        keyEquivalent: "")
-            .target = updaterController
         appMenu.addItem(.separator())
         let hideItem = appMenu.addItem(withTitle: "Hide LocalTube", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         hideItem.target = NSApp
@@ -172,8 +161,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Bootstrap
 
     private func bootstrapAppState() {
-        guard let appState else { return }
-
         // Wire download service back-reference
         appState.setup()
 
@@ -187,8 +174,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Wire download service event handler → bridge emitter
         appState.downloadService.eventHandler = { [weak self] event in
-            guard let self, let wc = self.windowController, let state = self.appState else { return }
-            let emitter = wc.bridge.emitter
+            guard let self else { return }
+            let emitter = self.windowController.bridge.emitter
+            let state   = self.appState!
             switch event {
             case .progress(let videoId, let progress):
                 emitter.emitDownloadProgress(videoId: videoId.uuidString, progress: progress)
@@ -203,7 +191,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Wire editor timer tick → bridge emitter
         appState.onEditorTimerTick = { [weak self] remaining in
-            self?.windowController?.bridge.emitter.emitEditorTimerTick(remainingSeconds: remaining)
+            self?.windowController.bridge.emitter.emitEditorTimerTick(remainingSeconds: remaining)
         }
     }
 }

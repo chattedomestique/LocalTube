@@ -19,6 +19,10 @@ final class PlayerState {
     private var itemEndObserver: Any?
     weak var appState: AppState?   // internal so ViewerRootView can wire it post-init
 
+    /// Called on the main actor whenever playback state changes (time, play/pause, end).
+    /// PlayerOverlayController uses this to push state to the React player UI.
+    var onStateChanged: (@MainActor () -> Void)?
+
     init(appState: AppState? = nil) {
         self.appState = appState
         setupPlayer()
@@ -79,6 +83,7 @@ final class PlayerState {
         }
         isPlaying.toggle()
         showControls()
+        onStateChanged?()
     }
 
     func skip(seconds: Double) {
@@ -150,6 +155,7 @@ final class PlayerState {
             let seconds = CMTimeGetSeconds(time)
             Task { @MainActor in
                 self.currentTime = seconds
+                self.onStateChanged?()
                 // Save resume position every 5 seconds
                 if seconds > 0 && seconds.truncatingRemainder(dividingBy: 5) < 0.55 {
                     self.saveResumePosition()
@@ -170,6 +176,7 @@ final class PlayerState {
                     self.player.play()
                 } else {
                     self.isPlaying = false
+                    self.onStateChanged?()
                     // Reset resume position so next play starts from beginning
                     if let video = self.currentVideo {
                         self.appState?.updateResumePosition(videoId: video.id, seconds: 0)

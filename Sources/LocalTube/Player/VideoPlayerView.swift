@@ -161,6 +161,7 @@ private struct GlassCircleButton: View {
             Image(systemName: icon)
                 .font(.system(size: fontSize, weight: .semibold))
                 .foregroundStyle(Color.white)
+                .contentTransition(.symbolEffect(.replace))
         }
         .frame(width: size, height: size)
         .scaleEffect(isPressed ? 0.88 : isHovered ? 1.06 : 1.0)
@@ -177,6 +178,109 @@ private struct GlassCircleButton: View {
                 .onChanged { _ in isPressed = true }
                 .onEnded   { _ in isPressed = false }
         )
+    }
+}
+
+/// Play/pause button — observes PlayerState directly so spacebar (via
+/// PlayerPanel.keyDown → PlayerState.togglePlayPause) updates the icon
+/// without relying on a parent re-render passing a new `icon` param.
+private struct PlayPauseButton: View {
+    @Environment(PlayerState.self) private var playerState
+
+    @State private var isHovered = false
+    @State private var isPressed = false
+
+    var body: some View {
+        let icon = playerState.isPlaying ? "pause.fill" : "play.fill"
+        ZStack {
+            Circle().fill(.ultraThinMaterial)
+            Circle().fill(Color.white.opacity(isPressed ? 0.38 : isHovered ? 0.26 : 0.16))
+            Circle().strokeBorder(Color.white.opacity(isHovered ? 0.50 : 0.24), lineWidth: 1)
+            Image(systemName: icon)
+                .font(.system(size: 34, weight: .semibold))
+                .foregroundStyle(Color.white)
+                .contentTransition(.symbolEffect(.replace))
+        }
+        .frame(width: 84, height: 84)
+        .scaleEffect(isPressed ? 0.88 : isHovered ? 1.06 : 1.0)
+        .shadow(color: .black.opacity(isHovered ? 0.55 : 0.4),
+                radius: isHovered ? 28 : 16, y: isHovered ? 8 : 4)
+        .animation(isPressed ? .easeOut(duration: 0.09)
+                             : .spring(response: 0.3, dampingFraction: 0.7),
+                   value: isHovered)
+        .animation(.easeOut(duration: 0.09), value: isPressed)
+        .onHover { isHovered = $0 }
+        .onTapGesture { playerState.togglePlayPause() }
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { _ in isPressed = true }
+                .onEnded   { _ in isPressed = false }
+        )
+    }
+}
+
+// MARK: - Scrub Bar
+
+private struct ScrubBar: View {
+    @Environment(PlayerState.self) private var playerState
+
+    @State private var isHovered  = false
+    @State private var isDragging = false
+
+    var body: some View {
+        VStack(spacing: 8) {
+            GeometryReader { geo in
+                let progress = playerState.duration > 0
+                    ? CGFloat(playerState.currentTime / playerState.duration)
+                    : 0
+                let active   = isHovered || isDragging
+                let trackH   = CGFloat(active ? 8 : 4)
+                let knobX    = geo.size.width * progress - 8   // centre the 16-pt knob
+
+                ZStack(alignment: .leading) {
+                    // Track background
+                    Capsule()
+                        .fill(Color.white.opacity(0.28))
+                        .frame(height: trackH)
+
+                    // Filled portion
+                    Capsule()
+                        .fill(Color.ltAccent)
+                        .frame(width: max(0, geo.size.width * progress), height: trackH)
+
+                    // Draggable knob
+                    Circle()
+                        .fill(Color.white)
+                        .frame(width: 16, height: 16)
+                        .shadow(color: .black.opacity(0.5), radius: 4, y: 2)
+                        .opacity(active ? 1 : 0)
+                        .offset(x: max(0, min(geo.size.width - 16, knobX)))
+                }
+                .animation(.easeInOut(duration: 0.16), value: active)
+                .contentShape(Rectangle())
+                .onHover { isHovered = $0 }
+                .gesture(
+                    DragGesture(minimumDistance: 0)
+                        .onChanged { value in
+                            isDragging = true
+                            let frac = max(0, min(1, value.location.x / geo.size.width))
+                            playerState.skip(seconds: frac * playerState.duration - playerState.currentTime)
+                        }
+                        .onEnded { _ in isDragging = false }
+                )
+            }
+            .frame(height: 28)
+
+            HStack {
+                Text(DurationFormatter.format(seconds: playerState.currentTime))
+                    .font(.system(size: 20, weight: .medium).monospacedDigit())
+                    .foregroundStyle(Color.white.opacity(0.9))
+                Spacer()
+                Text(DurationFormatter.format(seconds: playerState.duration))
+                    .font(.system(size: 20, weight: .medium).monospacedDigit())
+                    .foregroundStyle(Color.white.opacity(0.9))
+            }
+        }
     }
 }
 
@@ -270,12 +374,7 @@ struct PlayerControlsOverlay: View {
                 GlassCircleButton(icon: "gobackward.10", fontSize: 22, size: 66) {
                     playerState.skip(seconds: -10)
                 }
-                GlassCircleButton(
-                    icon: playerState.isPlaying ? "pause.fill" : "play.fill",
-                    fontSize: 34, size: 84
-                ) {
-                    playerState.togglePlayPause()
-                }
+                PlayPauseButton()
                 GlassCircleButton(icon: "goforward.10", fontSize: 22, size: 66) {
                     playerState.skip(seconds: 10)
                 }
@@ -286,7 +385,7 @@ struct PlayerControlsOverlay: View {
             VStack {
                 Spacer()
                 VStack(spacing: 16) {
-                    progressBar
+                    ScrubBar()
                     HStack(spacing: 12) {
                         Image(systemName: "speaker.fill")
                             .font(.system(size: 18))
@@ -318,7 +417,11 @@ struct PlayerControlsOverlay: View {
         )
         .contentShape(Rectangle())
         .onTapGesture { playerState.showControls() }
-        .onHover { if $0 { playerState.showControls() } }
+        // onContinuousHover fires on every mouse-move, not just enter/exit,
+        // so controls stay visible while the cursor is moving.
+        .onContinuousHover { phase in
+            if case .active = phase { playerState.showControls() }
+        }
     }
 
     // MARK: - Loop Button
@@ -334,43 +437,4 @@ struct PlayerControlsOverlay: View {
         .accessibilityLabel(playerState.isLooping ? "Loop on" : "Loop off")
     }
 
-    // MARK: - Progress Bar
-
-    private var progressBar: some View {
-        VStack(spacing: 8) {
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    Capsule()
-                        .fill(Color.white.opacity(0.28))
-                        .frame(height: 4)
-                    Capsule()
-                        .fill(Color.ltAccent)
-                        .frame(
-                            width: playerState.duration > 0
-                                ? geo.size.width * CGFloat(playerState.currentTime / playerState.duration)
-                                : 0,
-                            height: 4
-                        )
-                }
-                .contentShape(Rectangle())
-                .gesture(
-                    DragGesture(minimumDistance: 0).onChanged { value in
-                        let frac = max(0, min(1, value.location.x / geo.size.width))
-                        playerState.skip(seconds: frac * playerState.duration - playerState.currentTime)
-                    }
-                )
-            }
-            .frame(height: 28)
-
-            HStack {
-                Text(DurationFormatter.format(seconds: playerState.currentTime))
-                    .font(.system(size: 20, weight: .medium).monospacedDigit())
-                    .foregroundStyle(Color.white.opacity(0.9))
-                Spacer()
-                Text(DurationFormatter.format(seconds: playerState.duration))
-                    .font(.system(size: 20, weight: .medium).monospacedDigit())
-                    .foregroundStyle(Color.white.opacity(0.9))
-            }
-        }
-    }
 }

@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import Sparkle
 
 // MARK: - App Delegate
 //
@@ -13,6 +14,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var appState: AppState!
     private var windowController: WebWindowController!
+
+    // Sparkle updater — must be retained for the lifetime of the app.
+    // SUFeedURL in Info.plist tells Sparkle where to find the appcast.
+    private let updaterController = SPUStandardUpdaterController(
+        startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
 
     // MARK: - Lifecycle
 
@@ -101,6 +107,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appMenuItem.submenu = appMenu
 
         appMenu.addItem(withTitle: "About LocalTube", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        appMenu.addItem(.separator())
+        appMenu.addItem(withTitle: "Check for Updates…",
+                        action: #selector(SPUStandardUpdaterController.checkForUpdates(_:)),
+                        keyEquivalent: "")
+            .target = updaterController
         appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
             .target = self

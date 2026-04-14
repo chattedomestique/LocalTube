@@ -51,7 +51,11 @@ final class PlayerOverlayController {
         }
 
         panel.makeKeyAndOrderFront(nil)
-        state.play(video: video)
+        // Use saved position only if > 10 s in; otherwise restart from beginning.
+        // The full resume-or-restart prompt is handled by VideoPlayerView in the
+        // SwiftUI path; this bridge path applies the same threshold silently.
+        let startSeconds = video.resumePositionSeconds > 10 ? video.resumePositionSeconds : 0
+        state.play(video: video, startSeconds: startSeconds)
 
         // Observe player stop to auto-hide
         observePlayerStop(state: state)

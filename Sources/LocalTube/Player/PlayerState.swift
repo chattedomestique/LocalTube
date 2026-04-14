@@ -26,7 +26,11 @@ final class PlayerState {
 
     // MARK: - Playback
 
-    func play(video: Video) {
+    /// Begin playback of `video` from an explicit position.
+    /// Pass `startSeconds: 0` to play from the beginning, or the saved
+    /// `video.resumePositionSeconds` to resume. The resume/start decision
+    /// is made by the caller (VideoPlayerView) based on the saved position.
+    func play(video: Video, startSeconds: Double) {
         guard video.isPlayable else { return }
         currentVideo = video
 
@@ -58,9 +62,8 @@ final class PlayerState {
 
             guard item.status == .readyToPlay else { return }
 
-            // Resume from saved position after the item is ready
-            if video.resumePositionSeconds > 5 {
-                let time = CMTime(seconds: video.resumePositionSeconds, preferredTimescale: 600)
+            if startSeconds > 0 {
+                let time = CMTime(seconds: startSeconds, preferredTimescale: 600)
                 let tol  = CMTime(seconds: 1, preferredTimescale: 600)
                 await player.seek(to: time, toleranceBefore: tol, toleranceAfter: tol)
             }
@@ -93,7 +96,11 @@ final class PlayerState {
     }
 
     func stop() {
-        saveResumePosition()
+        // Don't save position if video played to end — it was already reset to 0
+        let pos = CMTimeGetSeconds(player.currentTime())
+        if duration <= 0 || pos < duration - 2 {
+            saveResumePosition()
+        }
         player.pause()
         player.replaceCurrentItem(with: nil)
         isPlaying = false
@@ -166,6 +173,10 @@ final class PlayerState {
                     self.player.play()
                 } else {
                     self.isPlaying = false
+                    // Reset resume position so the video starts from the beginning next time
+                    if let video = self.currentVideo {
+                        self.appState?.updateResumePosition(videoId: video.id, seconds: 0)
+                    }
                 }
             }
         }

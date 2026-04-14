@@ -48,6 +48,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             await appState.loadLibrary()
             // After library is loaded, push full state to the WebView
             windowController.bridge.emitter.emitStateUpdate(appState)
+
         }
     }
 

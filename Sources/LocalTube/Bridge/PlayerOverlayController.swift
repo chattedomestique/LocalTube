@@ -63,10 +63,11 @@ final class PlayerOverlayController {
             self?.pushPlayerState()
         }
 
-        // Size panel to match parent window content area
-        if let parent = parentWindow {
-            let frame = parent.contentView?.window?.frame ?? parent.frame
-            panel.setFrame(frame, display: false)
+        // Size panel to the content area only (below the title bar) so the
+        // title bar stays exposed and the window remains draggable.
+        if let parent = parentWindow, let contentView = parent.contentView {
+            let contentScreenFrame = parent.convertToScreen(contentView.frame)
+            panel.setFrame(contentScreenFrame, display: false)
             let alreadyChild = parent.childWindows?.contains { $0 === panel } ?? false
             if !alreadyChild {
                 parent.addChildWindow(panel, ordered: .above)

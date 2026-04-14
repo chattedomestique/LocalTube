@@ -232,10 +232,10 @@ function TransportBtn({ onClick, size = 84, children }: TransportBtnProps) {
         justifyContent: 'center',
         cursor: 'pointer',
         userSelect: 'none',
-        scale: pressed ? '0.88' : hovered ? '1.06' : '1',
+        transform: `scale(${pressed ? 0.88 : hovered ? 1.06 : 1})`,
         transition: pressed
-          ? 'scale 90ms cubic-bezier(0.4,0,0.2,1), background 90ms cubic-bezier(0.4,0,0.2,1), box-shadow 90ms cubic-bezier(0.4,0,0.2,1), border-color 90ms cubic-bezier(0.4,0,0.2,1)'
-          : 'scale 220ms cubic-bezier(0.34,1.2,0.64,1), background 180ms cubic-bezier(0.4,0,0.2,1), box-shadow 180ms cubic-bezier(0.4,0,0.2,1), border-color 180ms cubic-bezier(0.4,0,0.2,1)',
+          ? 'transform 90ms cubic-bezier(0.4,0,0.2,1), background 90ms cubic-bezier(0.4,0,0.2,1), box-shadow 90ms cubic-bezier(0.4,0,0.2,1), border-color 90ms cubic-bezier(0.4,0,0.2,1)'
+          : 'transform 220ms cubic-bezier(0.34,1.2,0.64,1), background 180ms cubic-bezier(0.4,0,0.2,1), box-shadow 180ms cubic-bezier(0.4,0,0.2,1), border-color 180ms cubic-bezier(0.4,0,0.2,1)',
       }}
     >
       {children}
@@ -278,10 +278,10 @@ function BackButton({ onClick }: { onClick: () => void }) {
         cursor: 'pointer',
         userSelect: 'none',
         flexShrink: 0,
-        scale: pressed ? '0.88' : hovered ? '1.06' : '1',
+        transform: `scale(${pressed ? 0.88 : hovered ? 1.06 : 1})`,
         transition: pressed
-          ? 'scale 90ms cubic-bezier(0.4,0,0.2,1), background 90ms cubic-bezier(0.4,0,0.2,1), box-shadow 90ms cubic-bezier(0.4,0,0.2,1), border-color 90ms cubic-bezier(0.4,0,0.2,1)'
-          : 'scale 220ms cubic-bezier(0.34,1.2,0.64,1), background 180ms cubic-bezier(0.4,0,0.2,1), box-shadow 180ms cubic-bezier(0.4,0,0.2,1), border-color 180ms cubic-bezier(0.4,0,0.2,1)',
+          ? 'transform 90ms cubic-bezier(0.4,0,0.2,1), background 90ms cubic-bezier(0.4,0,0.2,1), box-shadow 90ms cubic-bezier(0.4,0,0.2,1), border-color 90ms cubic-bezier(0.4,0,0.2,1)'
+          : 'transform 220ms cubic-bezier(0.34,1.2,0.64,1), background 180ms cubic-bezier(0.4,0,0.2,1), box-shadow 180ms cubic-bezier(0.4,0,0.2,1), border-color 180ms cubic-bezier(0.4,0,0.2,1)',
       }}
     >
       <BackArrowIcon />

@@ -170,15 +170,101 @@ export default function Channel() {
   const channelTitleSize = 28 - 6 * collapseProgress
   const topBarShadowAlpha = 0.35 * collapseProgress
 
-  // Pick a random thumbnail from this channel to use as the ambient background.
-  // Stable per channel (only re-randomizes when the channel id changes or the
-  // first playable thumb becomes available after an initial empty load).
+  // Pick a random thumbnail from this channel to use as the *initial* ambient
+  // background. The scroll-driven crossfade below takes over once the user
+  // starts scrolling.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const bgThumb = useMemo(() => {
+  const initialBgThumb = useMemo(() => {
     const withThumb = sortedVideos.filter(v => v.thumbnailPath)
     if (withThumb.length === 0) return null
     return withThumb[Math.floor(Math.random() * withThumb.length)]
   }, [channel.id, sortedVideos.length > 0])
+
+  // ── Ambient background: two-slot crossfade ────────────────────────────────
+  // We keep two background slots (a, b) and toggle which one is rendered at
+  // opacity 1 vs 0. Swapping the *inactive* slot to a new video and then
+  // flipping activeKey gives us a clean opacity crossfade without ever
+  // reloading the currently-visible image — which would force the browser to
+  // re-rasterize the full-screen blur stack mid-fade.
+  //
+  // The dominant visible video is picked via IntersectionObserver (cheap
+  // native API) and only committed after a 350 ms trailing-edge debounce so
+  // a fast scroll past 20 cards triggers one crossfade, not twenty.
+  type BgSlots = { a: Video | null; b: Video | null; active: 'a' | 'b' }
+  const [bgSlots, setBgSlots] = useState<BgSlots>({ a: null, b: null, active: 'a' })
+
+  // Seed the active slot with the initial random pick when entering the channel.
+  useEffect(() => {
+    setBgSlots({ a: initialBgThumb, b: null, active: 'a' })
+  }, [channel.id, initialBgThumb])
+
+  const swapBg = useCallback((next: Video) => {
+    setBgSlots(prev => {
+      const current = prev.active === 'a' ? prev.a : prev.b
+      if (current?.id === next.id) return prev
+      // Write the new video into the *inactive* slot, then flip active so
+      // the new slot fades in while the old one fades out. The image that
+      // *was* on screen is left in place until its opacity finishes
+      // transitioning, so no re-rasterization of a visible blur layer.
+      return prev.active === 'a'
+        ? { a: prev.a, b: next, active: 'b' }
+        : { a: next, b: prev.b, active: 'a' }
+    })
+  }, [])
+
+  // IntersectionObserver: watch all card wrappers, pick the middle visible
+  // one whenever the visible set has stabilised. Re-attached whenever the
+  // visible card list changes (pagination, search).
+  const visibleIdsRef = useRef<Set<string>>(new Set())
+  const dominantTimerRef = useRef<number | null>(null)
+  const videosByIdRef = useRef<Map<string, Video>>(new Map())
+  useEffect(() => {
+    videosByIdRef.current = new Map(pagedVideos.map(v => [v.id, v]))
+  }, [pagedVideos])
+
+  useEffect(() => {
+    const grid = scrollRef.current?.querySelector('[data-video-grid]')
+    if (!grid) return
+    const cards = grid.querySelectorAll<HTMLElement>('[data-video-id]')
+    if (cards.length === 0) return
+
+    const observer = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        const id = (entry.target as HTMLElement).dataset.videoId
+        if (!id) continue
+        if (entry.isIntersecting) visibleIdsRef.current.add(id)
+        else visibleIdsRef.current.delete(id)
+      }
+      // Trailing-edge debounce — only fire ~350 ms after the last visibility
+      // change. Fast scrolls produce many entries in quick succession; we
+      // only commit a crossfade once the user settles.
+      if (dominantTimerRef.current !== null) {
+        window.clearTimeout(dominantTimerRef.current)
+      }
+      dominantTimerRef.current = window.setTimeout(() => {
+        dominantTimerRef.current = null
+        // Preserve grid order — Set insertion order isn't useful here.
+        const inOrder = pagedVideos
+          .filter(v => visibleIdsRef.current.has(v.id) && v.thumbnailPath)
+        if (inOrder.length === 0) return
+        const mid = inOrder[Math.floor(inOrder.length / 2)]
+        swapBg(mid)
+      }, 350)
+    }, {
+      root: scrollRef.current,
+      threshold: 0.5,
+    })
+
+    cards.forEach(el => observer.observe(el))
+    return () => {
+      observer.disconnect()
+      visibleIdsRef.current.clear()
+      if (dominantTimerRef.current !== null) {
+        window.clearTimeout(dominantTimerRef.current)
+        dominantTimerRef.current = null
+      }
+    }
+  }, [pagedVideos, swapBg])
 
   return (
     <div className="screen-slide-in" onWheel={handleScreenWheel} style={{
@@ -189,52 +275,18 @@ export default function Channel() {
       overflow: 'hidden',
       background: 'var(--bg)',
     }}>
-      {/* ── Ambient background ─────────────────────────────────────────────── */}
-      {bgThumb && (
+      {/* ── Ambient background (two-slot crossfade) ───────────────────────── */}
+      {(bgSlots.a || bgSlots.b) && (
         <div style={{ position: 'absolute', inset: 0, zIndex: 0, pointerEvents: 'none' }}>
-          {/* Layer 1 — primary blur: high saturation + contrast to push color
-              values apart, reducing quantization banding. */}
-          <Thumb
-            video={bgThumb}
-            style={{
-              position: 'absolute',
-              inset: 0,
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover',
-              filter: 'blur(64px) saturate(200%) contrast(1.12) brightness(0.85)',
-              opacity: 0.52,
-              transform: 'scale(1.3)',
-              transformOrigin: 'center',
-            }}
-          />
-          {/* Layer 2 — screen blend at a different blur radius + hue rotation.
-              The two overlapping colour fields break each other's banding
-              without adding noise — same technique as Apple's album art blurs. */}
-          <Thumb
-            video={bgThumb}
-            style={{
-              position: 'absolute',
-              inset: 0,
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover',
-              filter: 'blur(40px) saturate(240%) brightness(1.15) hue-rotate(22deg)',
-              opacity: 0.18,
-              transform: 'scale(1.3) rotate(180deg)',
-              transformOrigin: 'center',
-              mixBlendMode: 'screen',
-            }}
-          />
-          {/* Dark scrim so cards and text stay legible */}
+          <BgBlurStack video={bgSlots.a} visible={bgSlots.active === 'a'} />
+          <BgBlurStack video={bgSlots.b} visible={bgSlots.active === 'b'} />
+          {/* Dark scrim — kept outside the crossfade so legibility is constant. */}
           <div style={{
             position: 'absolute',
             inset: 0,
             background: 'rgba(13,13,15,0.68)',
           }} />
-          {/* Monochromatic pixel noise — breaks banding at 10% opacity.
-              SVG feTurbulence with 1 octave + high baseFrequency ≈ small discrete
-              pixel grain (no smooth swirls). stitchTiles keeps the tile seam invisible. */}
+          {/* Monochromatic pixel noise — breaks the blur's banding at 10%. */}
           <div style={{
             position: 'absolute',
             inset: 0,
@@ -298,7 +350,7 @@ export default function Channel() {
         padding: '0 40px',
         height: 80,
         background: 'linear-gradient(135deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.04) 100%)',
-        backgroundColor: bgThumb ? 'rgba(13,13,15,0.75)' : 'rgba(13,13,15,0.88)',
+        backgroundColor: initialBgThumb ? 'rgba(13,13,15,0.75)' : 'rgba(13,13,15,0.88)',
         backdropFilter: 'blur(28px) saturate(200%)',
         WebkitBackdropFilter: 'blur(28px) saturate(200%)',
         borderBottom: '0.5px solid rgba(255,255,255,0.1)',
@@ -676,7 +728,7 @@ export default function Channel() {
               gap: 22,
             }}>
               {pagedVideos.map(video => (
-                <div key={video.id} className="reveal">
+                <div key={video.id} data-video-id={video.id} className="reveal">
                   <VideoCard
                     video={video}
                     isEditorMode={isEditor}
@@ -830,6 +882,60 @@ export default function Channel() {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// ─── Ambient blur stack ──────────────────────────────────────────────────────
+// One layer of the two-slot crossfade. Renders the same two stacked blurs the
+// previous single-bg version did, wrapped in an opacity-transitioned div so
+// the *slot* can fade as a unit. transition: opacity ~800ms gives the
+// crossfade an ambient feel rather than a snap. willChange hints the
+// compositor to keep a separate layer so the blur output is cached between
+// swaps. pointer-events stay off so nothing intercepts grid interactions.
+const BG_FADE_MS = 800
+function BgBlurStack({ video, visible }: { video: Video | null; visible: boolean }) {
+  if (!video) return null
+  return (
+    <div style={{
+      position: 'absolute',
+      inset: 0,
+      opacity: visible ? 1 : 0,
+      transition: `opacity ${BG_FADE_MS}ms ease`,
+      pointerEvents: 'none',
+      willChange: 'opacity',
+    }}>
+      {/* Layer 1 — primary blur */}
+      <Thumb
+        video={video}
+        style={{
+          position: 'absolute',
+          inset: 0,
+          width: '100%',
+          height: '100%',
+          objectFit: 'cover',
+          filter: 'blur(64px) saturate(200%) contrast(1.12) brightness(0.85)',
+          opacity: 0.52,
+          transform: 'scale(1.3)',
+          transformOrigin: 'center',
+        }}
+      />
+      {/* Layer 2 — screen-blend overlay, breaks the primary's banding */}
+      <Thumb
+        video={video}
+        style={{
+          position: 'absolute',
+          inset: 0,
+          width: '100%',
+          height: '100%',
+          objectFit: 'cover',
+          filter: 'blur(40px) saturate(240%) brightness(1.15) hue-rotate(22deg)',
+          opacity: 0.18,
+          transform: 'scale(1.3) rotate(180deg)',
+          transformOrigin: 'center',
+          mixBlendMode: 'screen',
+        }}
+      />
     </div>
   )
 }

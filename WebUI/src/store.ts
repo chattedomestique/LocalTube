@@ -6,7 +6,7 @@ import React, {
   useCallback,
   useRef,
 } from 'react'
-import type { AppState, BridgeEvent, BridgeMessage, NavState } from './types'
+import type { AppState, BridgeEvent, BridgeMessage, NavState, Video } from './types'
 import { sendBridge, initBridge } from './bridge'
 
 // ─── Default State ─────────────────────────────────────────────────────────
@@ -179,6 +179,49 @@ function applyBridgeEvent(app: AppState, event: BridgeEvent): AppState {
     }
     case 'editorTimerTick': {
       return { ...app, editorRemainingSeconds: event.payload.remainingSeconds }
+    }
+    // ── Targeted diff events ──────────────────────────────────────────────
+    case 'channelUpserted': {
+      const { channel } = event.payload
+      const idx = app.channels.findIndex(c => c.id === channel.id)
+      const channels = idx === -1
+        ? [...app.channels, channel].sort((a, b) => a.sortOrder - b.sortOrder)
+        : app.channels.map((c, i) => (i === idx ? channel : c))
+      const videos = app.videos[channel.id] ? app.videos : { ...app.videos, [channel.id]: [] }
+      return { ...app, channels, videos }
+    }
+    case 'channelRemoved': {
+      const { channelId } = event.payload
+      const channels = app.channels.filter(c => c.id !== channelId)
+      const videos = { ...app.videos }
+      delete videos[channelId]
+      return { ...app, channels, videos }
+    }
+    case 'videosUpserted': {
+      const { channelId, videos: incoming } = event.payload
+      const existing = app.videos[channelId] ?? []
+      const byId = new Map(existing.map(v => [v.id, v] as const))
+      for (const v of incoming) byId.set(v.id, v)
+      const merged = Array.from(byId.values()).sort((a, b) => a.sortOrder - b.sortOrder)
+      return { ...app, videos: { ...app.videos, [channelId]: merged } }
+    }
+    case 'videoRemoved': {
+      const { videoId } = event.payload
+      const videos: Record<string, Video[]> = {}
+      for (const cid of Object.keys(app.videos)) {
+        videos[cid] = app.videos[cid].filter(v => v.id !== videoId)
+      }
+      return { ...app, videos }
+    }
+    case 'settingsUpdated': {
+      return { ...app, settings: { ...app.settings, ...event.payload.settings } }
+    }
+    case 'appModeChanged': {
+      return {
+        ...app,
+        appMode: event.payload.appMode,
+        editorRemainingSeconds: event.payload.editorRemainingSeconds,
+      }
     }
     // folderSelected and pinValidated are handled via callbacks, not state
     default:

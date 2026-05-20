@@ -16,14 +16,23 @@ enum ViewerDestination: Hashable {
 }
 
 // MARK: - App State
+//
+// Root state container injected via `.environment(appState)`. Holds:
+//   • Library data + CRUD (delegated to `library: LibraryStore`)
+//   • UI navigation state (viewerPath, currentVideoId, editor selection)
+//   • Mode + onboarding gates (viewer/editor, PIN, dependency checks)
+//   • Service references with lifecycle (downloadService, dependencyService)
+//
+// LibraryStore was split out so the domain CRUD is testable in isolation.
+// Forwarding helpers below preserve compatibility with existing call sites
+// that go through `appState.channels`, `appState.addVideo(_:)`, etc.
 
 @Observable
 @MainActor
 final class AppState {
     // MARK: - Library
 
-    var channels: [Channel] = []
-    var videos: [UUID: [Video]] = [:]   // keyed by channelId
+    let library = LibraryStore()
 
     // MARK: - Navigation
 
@@ -60,7 +69,9 @@ final class AppState {
 
     // MARK: - Undo
 
-    var undoManager: UndoManager?
+    var undoManager: UndoManager? {
+        didSet { library.undoManager = undoManager }
+    }
 
     // MARK: - Sync State
 
@@ -85,193 +96,62 @@ final class AppState {
 
     func setup() {
         downloadService.appState = self
+        library.undoManager = undoManager
     }
 
     func loadLibrary() async {
-        do {
-            try await DatabaseService.shared.open()
-            let loaded = try await DatabaseService.shared.fetchAllChannels()
-            channels = loaded
-            // Eager-load all videos, healing any state left over from a previous
-            // session that was killed or rebuilt mid-download.
-            for channel in channels {
-                var vids = try await DatabaseService.shared.fetchVideos(forChannelId: channel.id)
-                vids = await healInterruptedDownloads(vids)
-                videos[channel.id] = vids
-            }
-        } catch {
-            AppLogger.error("Failed to load library: \(error.localizedDescription)")
-        }
+        await library.load()
     }
 
-    /// Resets any video that was mid-download when the previous process died.
-    /// Without this, those videos show a frozen progress bar with no way to recover
-    /// other than deleting and re-adding the video.
-    private func healInterruptedDownloads(_ vids: [Video]) async -> [Video] {
-        var healed = vids
-        for i in healed.indices where healed[i].downloadState == .downloading {
-            healed[i].downloadState    = .error
-            healed[i].downloadError    = "Download was interrupted — please tap Retry."
-            healed[i].downloadProgress = 0
-            AppLogger.info("Healed interrupted download for video \(healed[i].id)")
-            try? await DatabaseService.shared.updateVideo(healed[i])
-        }
-        return healed
+    // MARK: - Library Forwarders
+    //
+    // Keep existing call sites (views, bridge handlers, services) working by
+    // proxying the channel/video accessors. New code can call `library.X`
+    // directly; these forwarders are not deprecated yet because they read
+    // cleanly enough at call sites.
+
+    var channels: [Channel] {
+        get { library.channels }
+        set { library.channels = newValue }
     }
 
-    // MARK: - Lookup Helpers
-
-    func videoById(_ id: UUID) -> Video? {
-        for (_, vids) in videos {
-            if let v = vids.first(where: { $0.id == id }) { return v }
-        }
-        return nil
+    var videos: [UUID: [Video]] {
+        get { library.videos }
+        set { library.videos = newValue }
     }
 
-    func channelById(_ id: UUID) -> Channel? {
-        channels.first { $0.id == id }
-    }
+    func videoById(_ id: UUID) -> Video?        { library.videoById(id) }
+    func channelById(_ id: UUID) -> Channel?    { library.channelById(id) }
+    func videosForChannel(_ id: UUID) -> [Video] { library.videosForChannel(id) }
+    func firstThumbnail(for ch: Channel) -> String? { library.firstThumbnail(for: ch) }
 
-    func videosForChannel(_ channelId: UUID) -> [Video] {
-        videos[channelId] ?? []
-    }
-
-    func firstThumbnail(for channel: Channel) -> String? {
-        videos[channel.id]?.first(where: { !$0.thumbnailPath.isEmpty })?.thumbnailPath
-    }
-
-    // MARK: - Channel CRUD
-
-    func addChannel(_ channel: Channel) {
-        channels.append(channel)
-        channels.sort { $0.sortOrder < $1.sortOrder }
-        videos[channel.id] = []
-
-        undoManager?.registerUndo(withTarget: self) { [channelId = channel.id] target in
-            Task { @MainActor in
-                target.removeChannel(id: channelId, registerRedo: true)
-            }
-        }
-        undoManager?.setActionName("Add Channel")
-
-        Task {
-            try? await DatabaseService.shared.insertChannel(channel)
-        }
-    }
-
+    func addChannel(_ channel: Channel)         { library.addChannel(channel) }
     func removeChannel(id: UUID, registerRedo: Bool = false) {
-        guard let channel = channelById(id) else { return }
-        let channelVideos = videos[id] ?? []
-
-        channels.removeAll { $0.id == id }
-        videos.removeValue(forKey: id)
+        library.removeChannel(id: id, registerRedo: registerRedo)
         if editorSelectedChannelId == id { editorSelectedChannelId = nil }
-
-        if registerRedo {
-            undoManager?.registerUndo(withTarget: self) { [ch = channel, vids = channelVideos] target in
-                Task { @MainActor in
-                    target.addChannel(ch)
-                    for v in vids { target.videos[ch.id]?.append(v) }
-                }
-            }
-        } else {
-            undoManager?.registerUndo(withTarget: self) { [ch = channel, vids = channelVideos] target in
-                Task { @MainActor in
-                    target.channels.append(ch)
-                    target.videos[ch.id] = vids
-                    try? await DatabaseService.shared.insertChannel(ch)
-                }
-            }
-            undoManager?.setActionName("Delete Channel")
-        }
-
-        Task {
-            try? await DatabaseService.shared.deleteChannel(id: id)
-        }
     }
-
-    func updateChannel(_ channel: Channel) {
-        if let idx = channels.firstIndex(where: { $0.id == channel.id }) {
-            let old = channels[idx]
-            channels[idx] = channel
-
-            undoManager?.registerUndo(withTarget: self) { target in
-                Task { @MainActor in target.updateChannel(old) }
-            }
-            undoManager?.setActionName("Rename Channel")
-
-            Task { try? await DatabaseService.shared.updateChannel(channel) }
-        }
-    }
-
+    func updateChannel(_ channel: Channel)      { library.updateChannel(channel) }
     func moveChannels(from source: IndexSet, to destination: Int) {
-        channels.move(fromOffsets: source, toOffset: destination)
-        for (i, var ch) in channels.enumerated() {
-            ch.sortOrder = i
-            channels[i] = ch
-        }
-        let reordered = channels
-        Task {
-            for ch in reordered {
-                try? await DatabaseService.shared.updateChannel(ch)
-            }
-        }
+        library.moveChannels(from: source, to: destination)
     }
 
-    // MARK: - Video CRUD
-
-    func addVideo(_ video: Video) {
-        var arr = videos[video.channelId] ?? []
-        arr.append(video)
-        videos[video.channelId] = arr
-
-        undoManager?.registerUndo(withTarget: self) { [vid = video] target in
-            Task { @MainActor in target.removeVideo(id: vid.id) }
-        }
-        undoManager?.setActionName("Add Video")
-
-        Task { try? await DatabaseService.shared.insertVideo(video) }
-    }
-
-    func removeVideo(id: UUID) {
-        guard let video = videoById(id) else { return }
-        videos[video.channelId]?.removeAll { $0.id == id }
-
-        undoManager?.registerUndo(withTarget: self) { [v = video] target in
-            Task { @MainActor in target.addVideo(v) }
-        }
-        undoManager?.setActionName("Remove Video")
-
-        Task { try? await DatabaseService.shared.deleteVideo(id: id) }
-    }
-
-    func updateVideo(_ video: Video) {
-        guard let idx = videos[video.channelId]?.firstIndex(where: { $0.id == video.id }) else { return }
-        videos[video.channelId]?[idx] = video
-    }
-
+    func addVideo(_ video: Video)               { library.addVideo(video) }
+    func removeVideo(id: UUID)                  { library.removeVideo(id: id) }
+    func updateVideo(_ video: Video)            { library.updateVideo(video) }
     func moveVideos(in channelId: UUID, from source: IndexSet, to destination: Int) {
-        guard var arr = videos[channelId] else { return }
-        arr.move(fromOffsets: source, toOffset: destination)
-        for (i, var v) in arr.enumerated() {
-            v.sortOrder = i
-            arr[i] = v
-        }
-        videos[channelId] = arr
-        let updated = arr
-        Task {
-            for v in updated {
-                try? await DatabaseService.shared.updateVideo(v)
-            }
-        }
+        library.moveVideos(in: channelId, from: source, to: destination)
+    }
+    func updateResumePosition(videoId: UUID, seconds: Double) {
+        library.updateResumePosition(videoId: videoId, seconds: seconds)
     }
 
-    func updateResumePosition(videoId: UUID, seconds: Double) {
-        if var video = videoById(videoId) {
-            video.resumePositionSeconds = seconds
-            updateVideo(video)
-        }
-        Task { try? await DatabaseService.shared.updateResumePosition(videoId: videoId, seconds: seconds) }
+    // Used by DownloadService / LocalTubeBridge for fire-and-forget DB writes
+    // with consistent logging instead of `try?` swallowing.
+    func persist(
+        _ context: String,
+        _ op: @Sendable @escaping () async throws -> Void
+    ) async {
+        await library.persist(context, op)
     }
 
     // MARK: - Editor Mode
@@ -358,7 +238,9 @@ final class AppState {
                 if let idx = channels.firstIndex(where: { $0.id == channel.id }) {
                     channels[idx].bannerPath = bannerPath
                 }
-                try? await DatabaseService.shared.updateChannelBanner(id: channel.id, bannerPath: bannerPath)
+                await persist("updateChannelBanner") {
+                    try await DatabaseService.shared.updateChannelBanner(id: channel.id, bannerPath: bannerPath)
+                }
                 NotificationCenter.default.post(name: .channelBannerUpdated, object: nil)
             }
         }

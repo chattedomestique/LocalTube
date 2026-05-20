@@ -77,6 +77,42 @@ final class BridgeEventEmitter {
     func emitEditorTimerTick(remainingSeconds: Int) {
         emit("editorTimerTick", payload: ["remainingSeconds": remainingSeconds])
     }
+
+    // MARK: - Targeted diff emitters
+    //
+    // These let handlers push only the changed slice instead of the full
+    // bridgePayload (~1.5 MB for a 300-video library). The React reducer
+    // applies these as O(1) patches against its existing store.
+
+    func emitChannelUpserted(_ channel: Channel) {
+        emit("channelUpserted", payload: ["channel": channel.bridgePayload()])
+    }
+
+    func emitChannelRemoved(id: UUID) {
+        emit("channelRemoved", payload: ["channelId": id.uuidString])
+    }
+
+    func emitVideosUpserted(channelId: UUID, videos: [Video]) {
+        emit("videosUpserted", payload: [
+            "channelId": channelId.uuidString,
+            "videos": videos.map { $0.bridgePayload() },
+        ])
+    }
+
+    func emitVideoRemoved(id: UUID) {
+        emit("videoRemoved", payload: ["videoId": id.uuidString])
+    }
+
+    func emitSettingsUpdated(_ settings: AppSettings) {
+        emit("settingsUpdated", payload: ["settings": settings.bridgePayload()])
+    }
+
+    func emitAppModeChanged(mode: AppMode, editorRemainingSeconds: Int) {
+        emit("appModeChanged", payload: [
+            "appMode": mode == .editor ? "editor" : "viewer",
+            "editorRemainingSeconds": editorRemainingSeconds,
+        ])
+    }
 }
 
 // MARK: - Shared Formatter

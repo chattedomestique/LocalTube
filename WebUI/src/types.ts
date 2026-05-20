@@ -76,6 +76,14 @@ export type BridgeEvent =
   | { type: 'pinValidated';      payload: { valid: boolean } }
   | { type: 'editorTimerTick';   payload: { remainingSeconds: number } }
   | { type: 'navigateTo';        payload: NavState }
+  // Targeted diff events — emitted instead of full stateUpdate when only
+  // a single slice changed. The React reducer applies them as O(1) patches.
+  | { type: 'channelUpserted';   payload: { channel: Channel } }
+  | { type: 'channelRemoved';    payload: { channelId: string } }
+  | { type: 'videosUpserted';    payload: { channelId: string; videos: Video[] } }
+  | { type: 'videoRemoved';      payload: { videoId: string } }
+  | { type: 'settingsUpdated';   payload: { settings: AppSettings } }
+  | { type: 'appModeChanged';    payload: { appMode: AppMode; editorRemainingSeconds: number } }
 
 // ─── Bridge Messages (JS → Swift) ─────────────────────────────────────────
 export type BridgeMessage =

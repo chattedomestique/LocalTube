@@ -131,7 +131,12 @@ final class LocalTubeBridge: NSObject, WKScriptMessageHandler {
             return
         }
         let recovery = PINService.generateRecoveryPhrase()
-        try? PINService.savePin(pin, recoveryPhrase: recovery)
+        do {
+            try PINService.savePin(pin, recoveryPhrase: recovery)
+        } catch {
+            AppLogger.error("Bridge: setPIN savePin failed: \(error.localizedDescription)")
+            return
+        }
         if let appState {
             appState.needsPINSetup = false
             emitter.emitStateUpdate(appState)
@@ -141,13 +146,17 @@ final class LocalTubeBridge: NSObject, WKScriptMessageHandler {
     private func handleRequestEditorMode() {
         guard let appState else { return }
         appState.requestEditorMode()
+        // showPINEntry is a top-level flag — only it changed, send full state.
         emitter.emitStateUpdate(appState)
     }
 
     private func handleExitEditorMode() {
         guard let appState else { return }
         appState.exitEditorMode()
-        emitter.emitStateUpdate(appState)
+        emitter.emitAppModeChanged(
+            mode: appState.appMode,
+            editorRemainingSeconds: appState.editorRemainingSeconds
+        )
     }
 
     // MARK: - Channel CRUD
@@ -180,7 +189,7 @@ final class LocalTubeBridge: NSObject, WKScriptMessageHandler {
             sortOrder: appState.channels.count
         )
         appState.addChannel(channel)
-        emitter.emitStateUpdate(appState)
+        emitter.emitChannelUpserted(channel)
     }
 
     private func handleDeleteChannel(_ payload: [String: Any]) {
@@ -188,7 +197,7 @@ final class LocalTubeBridge: NSObject, WKScriptMessageHandler {
               let channelIdStr = payload["channelId"] as? String,
               let channelId    = UUID(uuidString: channelIdStr) else { return }
         appState.removeChannel(id: channelId)
-        emitter.emitStateUpdate(appState)
+        emitter.emitChannelRemoved(id: channelId)
     }
 
     // M11 fix: Validate displayName length on update.
@@ -205,7 +214,7 @@ final class LocalTubeBridge: NSObject, WKScriptMessageHandler {
         if let ytId  = payload["youtubeChannelId"] as? String { channel.youtubeChannelId = ytId }
 
         appState.updateChannel(channel)
-        emitter.emitStateUpdate(appState)
+        emitter.emitChannelUpserted(channel)
     }
 
     // MARK: - Video Management
@@ -219,6 +228,7 @@ final class LocalTubeBridge: NSObject, WKScriptMessageHandler {
 
         // M11 fix: Cap the number of URLs per request to prevent abuse.
         let cappedURLs = Array(urls.prefix(50))
+        var addedVideos: [Video] = []
         for url in cappedURLs {
             guard let videoId = url.youtubeVideoId else { continue }
             let alreadyAdded = appState.videosForChannel(channelId).contains { $0.youtubeVideoId == videoId }
@@ -231,9 +241,12 @@ final class LocalTubeBridge: NSObject, WKScriptMessageHandler {
                 sortOrder: appState.videosForChannel(channelId).count
             )
             appState.addVideo(video)
+            addedVideos.append(video)
             Task { await appState.downloadService.enqueue(video: video, channel: channel) }
         }
-        emitter.emitStateUpdate(appState)
+        if !addedVideos.isEmpty {
+            emitter.emitVideosUpserted(channelId: channelId, videos: addedVideos)
+        }
     }
 
     private func handleDeleteVideo(_ payload: [String: Any]) {
@@ -241,7 +254,7 @@ final class LocalTubeBridge: NSObject, WKScriptMessageHandler {
               let videoIdStr = payload["videoId"] as? String,
               let videoId    = UUID(uuidString: videoIdStr) else { return }
         appState.removeVideo(id: videoId)
-        emitter.emitStateUpdate(appState)
+        emitter.emitVideoRemoved(id: videoId)
     }
 
     private func handleRetryDownload(_ payload: [String: Any]) {
@@ -267,7 +280,7 @@ final class LocalTubeBridge: NSObject, WKScriptMessageHandler {
             appState.settings.checkDepsOnLaunch = check
         }
         SettingsService.save(appState.settings)
-        emitter.emitStateUpdate(appState)
+        emitter.emitSettingsUpdated(appState.settings)
     }
 
     // MARK: - Channel Sync

@@ -1,8 +1,15 @@
-import { useState, useMemo, useEffect, useRef } from 'react'
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { useAppStore } from '../store'
 import VideoCard, { Thumb } from '../components/VideoCard'
 import type { Video } from '../types'
 import { thumbUrl } from '../utils'
+
+// Banner collapse tuning — full banner at scrollTop=0, fully gone by
+// COLLAPSE_DISTANCE. Easing is applied to the raw progress so the early
+// scroll feels grippy and the tail eases out, matching YouTube's collapse.
+const BANNER_HEIGHT = 300
+const COLLAPSE_DISTANCE = 220
+const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3)
 
 export default function Channel() {
   const { state, nav, navigateTo, send } = useAppStore()
@@ -20,11 +27,40 @@ export default function Channel() {
   const [searchQuery, setSearchQuery] = useState('')
   const scrollRef = useRef<HTMLDivElement>(null)
 
+  // Scroll-driven banner collapse. We track scrollTop on the content scroll
+  // container and derive a 0→1 progress that drives the banner height/opacity
+  // and the top-bar elevation shadow. rAF coalesces fast scroll events into
+  // at most one state update per frame.
+  const [scrollY, setScrollY] = useState(0)
+  const rafRef = useRef<number | null>(null)
+  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    const y = e.currentTarget.scrollTop
+    if (rafRef.current !== null) return
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = null
+      setScrollY(y)
+    })
+  }, [])
+  useEffect(() => () => {
+    if (rafRef.current !== null) cancelAnimationFrame(rafRef.current)
+  }, [])
+
   // Reset to first page whenever the channel changes or search changes
   useEffect(() => { setCurrentPage(0) }, [nav.channelId, searchQuery])
 
   // Scroll content area back to top on every page change
-  useEffect(() => { scrollRef.current?.scrollTo({ top: 0, behavior: 'instant' }) }, [currentPage])
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: 0, behavior: 'instant' })
+    setScrollY(0)
+  }, [currentPage])
+
+  // Resetting scroll position when the channel changes too — otherwise a
+  // user scrolled deep in one channel keeps the banner collapsed when they
+  // navigate to another channel that may have no banner at all.
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: 0, behavior: 'instant' })
+    setScrollY(0)
+  }, [nav.channelId])
 
   const channel = channels.find(c => c.id === nav.channelId)
   const channelVideos = (nav.channelId ? videos[nav.channelId] : []) ?? []
@@ -110,6 +146,17 @@ export default function Channel() {
     [filteredVideos, currentPage, pageSize]
   )
 
+  // Derived collapse progress for the banner + top bar. Eased so the early
+  // scroll feels grippy. Only meaningful when a banner is present.
+  const hasBanner = !!channel.bannerPath
+  const rawProgress = hasBanner ? Math.min(1, Math.max(0, scrollY / COLLAPSE_DISTANCE)) : 0
+  const collapseProgress = easeOutCubic(rawProgress)
+  const bannerHeight = BANNER_HEIGHT * (1 - collapseProgress)
+  const bannerOpacity = 1 - collapseProgress
+  // Subtle channel-name shrink + shadow on the top bar once banner is mostly gone
+  const channelTitleSize = 28 - 6 * collapseProgress
+  const topBarShadowAlpha = 0.35 * collapseProgress
+
   // Pick a random thumbnail from this channel to use as the ambient background.
   // Stable per channel (only re-randomizes when the channel id changes or the
   // first playable thumb becomes available after an initial empty load).
@@ -187,14 +234,19 @@ export default function Channel() {
       )}
 
       {/* ── Banner hero ────────────────────────────────────────────────────── */}
-      {channel.bannerPath ? (
+      {hasBanner ? (
         <div style={{
           position: 'relative',
           zIndex: 1,
           width: '100%',
-          height: 300,
+          height: bannerHeight,
+          opacity: bannerOpacity,
           flexShrink: 0,
           overflow: 'hidden',
+          // No CSS transition on height — we drive it per-frame from the
+          // scroll handler so it tracks the scroll velocity exactly. Adding
+          // a transition here would feel laggy.
+          willChange: 'height, opacity',
         }}>
           <img
             src={channel.bannerPath}
@@ -203,9 +255,13 @@ export default function Channel() {
               position: 'absolute',
               inset: 0,
               width: '100%',
-              height: '100%',
+              // Use the unscaled banner height so the image doesn't rescale as
+              // the container shrinks — it just clips upward, matching how
+              // YouTube parallaxes the banner away.
+              height: BANNER_HEIGHT,
               objectFit: 'cover',
               filter: 'brightness(0.7) saturate(1.1)',
+              transform: `translateY(${-collapseProgress * BANNER_HEIGHT * 0.35}px)`,
             }}
             onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
           />
@@ -218,10 +274,12 @@ export default function Channel() {
         </div>
       ) : null}
 
-      {/* Top bar */}
+      {/* Top bar — sticky-ish: stays put while content scrolls underneath.
+          Gains a subtle drop shadow once the banner has collapsed to give
+          the compact header a sense of elevation over the scrolling list. */}
       <div style={{
         position: 'relative',
-        zIndex: 1,
+        zIndex: 2,
         display: 'flex',
         alignItems: 'center',
         padding: '0 40px',
@@ -231,6 +289,10 @@ export default function Channel() {
         backdropFilter: 'blur(28px) saturate(200%)',
         WebkitBackdropFilter: 'blur(28px) saturate(200%)',
         borderBottom: '0.5px solid rgba(255,255,255,0.1)',
+        boxShadow: topBarShadowAlpha > 0
+          ? `0 6px 22px rgba(0,0,0,${topBarShadowAlpha})`
+          : 'none',
+        transition: 'box-shadow 180ms ease-out',
         flexShrink: 0,
         gap: 12,
       }}>
@@ -254,7 +316,13 @@ export default function Channel() {
             <span style={{ fontSize: 20 }}>{channel.emoji}</span>
           )}
           <div>
-            <h1 style={{ fontSize: 28, fontWeight: 800, letterSpacing: '-0.02em' }}>
+            <h1 style={{
+              fontSize: channelTitleSize,
+              fontWeight: 800,
+              letterSpacing: '-0.02em',
+              // No transition — driven per-frame alongside banner collapse so
+              // it tracks scroll velocity.
+            }}>
               {channel.displayName}
             </h1>
           </div>
@@ -488,7 +556,7 @@ export default function Channel() {
       )}
 
       {/* Content */}
-      <div ref={scrollRef} style={{
+      <div ref={scrollRef} onScroll={handleScroll} style={{
         position: 'relative',
         zIndex: 1,
         flex: 1,

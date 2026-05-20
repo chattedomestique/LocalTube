@@ -42,7 +42,7 @@ fi
 # ── Ensure Sparkle tools are available ───────────────────────────────────────
 SIGN_UPDATE="$SPARKLE_TOOLS_DIR/bin/sign_update"
 if [[ ! -f "$SIGN_UPDATE" ]]; then
-  echo "==> Downloading Sparkle $SPARKLE_VERSION tools…"
+  echo "==> Downloading Sparkle $SPARKLE_VERSION tools..."
   mkdir -p "$SPARKLE_TOOLS_DIR"
   curl -fsSL "https://github.com/sparkle-project/Sparkle/releases/download/$SPARKLE_VERSION/Sparkle-$SPARKLE_VERSION.tar.xz" \
     -o "$SPARKLE_TOOLS_DIR/sparkle.tar.xz"
@@ -78,7 +78,7 @@ GIST_ID=${GIST_ID}
 ENV
 
 # ── Build and package ─────────────────────────────────────────────────────────
-echo "==> Building $APP_NAME…"
+echo "==> Building $APP_NAME..."
 MARKETING_VERSION="$MARKETING_VERSION" BUILD_NUMBER="$BUILD_NUMBER" \
   APPCAST_URL="$APPCAST_URL" SPARKLE_PUBLIC_KEY="$SPARKLE_PUBLIC_KEY" \
   APP_NAME="$APP_NAME" BUNDLE_ID="$BUNDLE_ID" SIGNING_MODE=adhoc \
@@ -87,11 +87,11 @@ MARKETING_VERSION="$MARKETING_VERSION" BUILD_NUMBER="$BUILD_NUMBER" \
 # ── Create release zip ────────────────────────────────────────────────────────
 ZIP_NAME="${APP_NAME}-${MARKETING_VERSION}.zip"
 ZIP_PATH="$ROOT_DIR/$ZIP_NAME"
-echo "==> Creating $ZIP_NAME…"
+echo "==> Creating $ZIP_NAME..."
 ditto -ck --keepParent "${APP_NAME}.app" "$ZIP_PATH"
 
 # ── Sign with Sparkle EdDSA ───────────────────────────────────────────────────
-echo "==> Signing with EdDSA…"
+echo "==> Signing with EdDSA..."
 ED_SIGNATURE=$("$SIGN_UPDATE" "$ZIP_PATH" 2>/dev/null | grep -oE '[A-Za-z0-9+/=]{80,}' | head -1)
 ZIP_LENGTH=$(wc -c < "$ZIP_PATH" | tr -d ' ')
 PUB_DATE=$(date -u +"%a, %d %b %Y %H:%M:%S +0000")
@@ -104,7 +104,7 @@ if [[ -z "$ED_SIGNATURE" ]]; then
 fi
 
 # ── Commit version bump ───────────────────────────────────────────────────────
-echo "==> Committing version bump…"
+echo "==> Committing version bump..."
 git add version.env
 git commit -m "Release $MARKETING_VERSION (build $BUILD_NUMBER)"
 TAG="v${MARKETING_VERSION}"
@@ -113,7 +113,7 @@ git push origin HEAD
 git push origin "$TAG"
 
 # ── GitHub Release + upload zip ───────────────────────────────────────────────
-echo "==> Creating GitHub Release $TAG…"
+echo "==> Creating GitHub Release $TAG..."
 DOWNLOAD_URL="https://github.com/chattedomestique/LocalTube/releases/download/${TAG}/${ZIP_NAME}"
 gh release create "$TAG" "$ZIP_PATH" \
   --title "$APP_NAME $MARKETING_VERSION" \
@@ -121,7 +121,7 @@ gh release create "$TAG" "$ZIP_PATH" \
   --latest
 
 # ── Update appcast.xml ────────────────────────────────────────────────────────
-echo "==> Updating appcast.xml…"
+echo "==> Updating appcast.xml..."
 
 # Preserve existing <item> entries so clients on old versions can still update.
 # Use Python to reliably extract complete <item>...</item> blocks — awk range
@@ -165,7 +165,7 @@ XML
 
 # ── Push appcast to Gist ──────────────────────────────────────────────────────
 if [[ -n "$GIST_ID" ]]; then
-  echo "==> Pushing appcast to Gist $GIST_ID…"
+  echo "==> Pushing appcast to Gist $GIST_ID..."
   gh gist edit "$GIST_ID" "$ROOT_DIR/appcast.xml"
   echo "✅ Appcast updated."
 else

@@ -62,6 +62,19 @@ export default function Channel() {
     setScrollY(0)
   }, [nav.channelId])
 
+  // Ten-foot UX: wheel/trackpad scrolling should work anywhere on the
+  // channel screen, not just when the cursor happens to be over the video
+  // grid. We forward any wheel event whose target isn't already inside
+  // scrollRef to the scroll container. Without this, scrolling while the
+  // cursor is over the banner, header, or search bar does nothing — which
+  // is exactly where the cursor is when the user *starts* to scroll down.
+  const handleScreenWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
+    const container = scrollRef.current
+    if (!container) return
+    if (container.contains(e.target as Node)) return  // already over scroll area
+    container.scrollBy({ top: e.deltaY, left: e.deltaX, behavior: 'auto' })
+  }, [])
+
   const channel = channels.find(c => c.id === nav.channelId)
   const channelVideos = (nav.channelId ? videos[nav.channelId] : []) ?? []
   const isEditor = appMode === 'editor'
@@ -168,7 +181,7 @@ export default function Channel() {
   }, [channel.id, sortedVideos.length > 0])
 
   return (
-    <div className="screen-slide-in" style={{
+    <div className="screen-slide-in" onWheel={handleScreenWheel} style={{
       display: 'flex',
       flexDirection: 'column',
       height: '100%',

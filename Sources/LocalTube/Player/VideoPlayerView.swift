@@ -36,6 +36,12 @@ struct VideoPlayerView: View {
     @Environment(AppState.self)    private var appState
     @Environment(PlayerState.self) private var playerState
     @State private var resumePromptVideo: Video?
+    // .focusable + this binding ensures the view actually receives keyboard
+    // events. Without explicit focus the .onKeyPress modifiers only fire
+    // when SwiftUI happens to have routed focus here — usually after a tap.
+    // The bound state is auto-focused in .onAppear so spacebar etc. work
+    // immediately on the very first frame, before the user has clicked.
+    @FocusState private var isFocused: Bool
 
     var body: some View {
         ZStack {
@@ -62,7 +68,13 @@ struct VideoPlayerView: View {
                 .animation(.easeInOut(duration: 0.25), value: resumePromptVideo == nil)
             }
         }
-        .onAppear  { startPlayback() }
+        .focusable()
+        .focused($isFocused)
+        .focusEffectDisabled()
+        .onAppear {
+            startPlayback()
+            isFocused = true
+        }
         .onDisappear {
             playerState.stop()
             playerState.cleanup()
@@ -74,7 +86,13 @@ struct VideoPlayerView: View {
         .onKeyPress(.upArrow)    { playerState.setVolume(playerState.player.volume + 0.1); return .handled }
         .onKeyPress(.downArrow)  { playerState.setVolume(playerState.player.volume - 0.1); return .handled }
         .onKeyPress(.escape)     { goBack(); return .handled }
-        .onTapGesture { playerState.showControls() }
+        // Reclaim focus whenever the user clicks anywhere in the player —
+        // clicking the macOS title bar or another window can steal focus
+        // and silently break keyboard shortcuts until the user clicks back.
+        .onTapGesture {
+            playerState.showControls()
+            isFocused = true
+        }
     }
 
     private func startPlayback() {
@@ -203,6 +221,9 @@ private struct PlayPauseButton: View {
                 .font(.system(size: 34, weight: .semibold))
                 .foregroundStyle(Color.white)
                 .contentTransition(.symbolEffect(.replace))
+                // Bounce on every play/pause flip — visible feedback even
+                // when the toggle came from spacebar (no hover/press state).
+                .symbolEffect(.bounce, value: playerState.isPlaying)
         }
         .frame(width: 84, height: 84)
         .scaleEffect(isPressed ? 0.88 : isHovered ? 1.06 : 1.0)

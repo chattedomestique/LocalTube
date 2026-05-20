@@ -572,15 +572,19 @@ input, textarea, [contenteditable] {
     0 4px 20px rgba(0, 0, 0, 0.4);
 }
 
-/* ─── Scroll-driven card reveal ──────────────────────────────────────────── */
+/* ─── Card reveal ─────────────────────────────────────────────────────────── */
+/* One-shot fade-in on insertion. The previous implementation used            */
+/* animation-timeline: view() with a translate keyframe — the parent          */
+/* wrapper's translate was driven per scroll-frame, which fought the inner    */
+/* card's :hover scale transition and produced the "sometimes snaps"          */
+/* hover behaviour for cards still in their entry range.                      */
+/* Opacity-only keeps the parent transform identity so child hover is clean.  */
 @keyframes reveal {
-  from { opacity: 0; translate: 0 40px; }
-  to   { opacity: 1; translate: 0 0; }
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 .reveal {
-  animation: reveal linear both;
-  animation-timeline: view();
-  animation-range: entry 0% entry 100%;
+  animation: reveal 220ms ease-out both;
   /* Isolate each card wrapper so layout/paint changes inside one card       */
   /* (e.g. download progress bar) can't cascade to siblings or cause the    */
   /* browser to recalculate styles for the entire grid.                     */

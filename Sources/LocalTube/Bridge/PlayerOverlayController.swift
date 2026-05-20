@@ -195,6 +195,14 @@ final class PlayerPanel: NSPanel {
 
     override var canBecomeKey: Bool  { true  }
     override var canBecomeMain: Bool { false }
+    // .nonactivatingPanel intentionally prevents the panel from stealing app
+    // activation, but the side effect is that clicking it doesn't promote it
+    // to key window — so keyboard shortcuts (space, arrows) silently break
+    // once focus drifts elsewhere. mouseDown reclaims key status explicitly.
+    override func mouseDown(with event: NSEvent) {
+        if !isKeyWindow { makeKey() }
+        super.mouseDown(with: event)
+    }
 
     override func keyDown(with event: NSEvent) {
         Task { @MainActor [weak self] in

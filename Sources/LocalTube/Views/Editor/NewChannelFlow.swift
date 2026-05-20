@@ -542,24 +542,28 @@ struct NewChannelFlow: View {
         discoveredCount  = 0
         retrieveError    = nil
 
-        let process = ChannelResolverService.fetchVideoURLs(
-            channelURL: youtubeURL,
-            onProgress: { count in
-                Task { @MainActor in discoveredCount = count }
-            }
-        ) { result in
-            Task { @MainActor in
-                isAutoRetrieving = false
-                switch result {
-                case .success(let urls):
-                    createTypeAChannel(withURLs: urls)
-                    dismiss()
-                case .failure(let err):
-                    retrieveError = err.localizedDescription
+        Task { @MainActor in
+            let ytDlpPath = await ChannelResolverService.findYtDlp()
+            let process = ChannelResolverService.fetchVideoURLs(
+                ytDlpPath: ytDlpPath,
+                channelURL: youtubeURL,
+                onProgress: { count in
+                    Task { @MainActor in discoveredCount = count }
+                }
+            ) { result in
+                Task { @MainActor in
+                    isAutoRetrieving = false
+                    switch result {
+                    case .success(let urls):
+                        createTypeAChannel(withURLs: urls)
+                        dismiss()
+                    case .failure(let err):
+                        retrieveError = err.localizedDescription
+                    }
                 }
             }
+            retrieveProcess = process
         }
-        retrieveProcess = process
     }
 }
 

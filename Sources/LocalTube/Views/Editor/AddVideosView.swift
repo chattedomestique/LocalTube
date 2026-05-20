@@ -245,36 +245,40 @@ struct AddVideosView: View {
         autoRetrieveError = nil
 
         let channelURL = "https://www.youtube.com/channel/\(channelId)"
-        let process = ChannelResolverService.fetchVideoURLs(
-            channelURL: channelURL,
-            onProgress: { count in
-                Task { @MainActor in autoRetrieveCount = count }
-            }
-        ) { result in
-            Task { @MainActor in
-                isAutoRetrieving = false
-                switch result {
-                case .success(let urls):
-                    for url in urls {
-                        guard let videoId = url.youtubeVideoId else { continue }
-                        let alreadyAdded = appState.videosForChannel(channel.id).contains { $0.youtubeVideoId == videoId }
-                        if alreadyAdded { continue }
-                        let video = Video(
-                            channelId: channel.id,
-                            youtubeVideoId: videoId,
-                            title: "Video \(videoId)",
-                            downloadState: .queued,
-                            sortOrder: appState.videosForChannel(channel.id).count
-                        )
-                        appState.addVideo(video)
-                        Task { await appState.downloadService.enqueue(video: video, channel: channel) }
+        Task { @MainActor in
+            let ytDlpPath = await ChannelResolverService.findYtDlp()
+            let process = ChannelResolverService.fetchVideoURLs(
+                ytDlpPath: ytDlpPath,
+                channelURL: channelURL,
+                onProgress: { count in
+                    Task { @MainActor in autoRetrieveCount = count }
+                }
+            ) { result in
+                Task { @MainActor in
+                    isAutoRetrieving = false
+                    switch result {
+                    case .success(let urls):
+                        for url in urls {
+                            guard let videoId = url.youtubeVideoId else { continue }
+                            let alreadyAdded = appState.videosForChannel(channel.id).contains { $0.youtubeVideoId == videoId }
+                            if alreadyAdded { continue }
+                            let video = Video(
+                                channelId: channel.id,
+                                youtubeVideoId: videoId,
+                                title: "Video \(videoId)",
+                                downloadState: .queued,
+                                sortOrder: appState.videosForChannel(channel.id).count
+                            )
+                            appState.addVideo(video)
+                            Task { await appState.downloadService.enqueue(video: video, channel: channel) }
+                        }
+                        onDone()
+                    case .failure(let err):
+                        autoRetrieveError = err.localizedDescription
                     }
-                    onDone()
-                case .failure(let err):
-                    autoRetrieveError = err.localizedDescription
                 }
             }
+            autoRetrieveProcess = process
         }
-        autoRetrieveProcess = process
     }
 }

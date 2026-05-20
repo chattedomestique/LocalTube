@@ -118,10 +118,17 @@ final class PlayerState {
 
     private func scheduleControlsHide() {
         hideControlsTask?.cancel()
+        // Keep controls visible while paused — a child who pauses and looks
+        // away shouldn't return to a blank video with no obvious way to
+        // resume. The hide timer resumes whenever playback resumes.
+        guard isPlaying else { return }
         hideControlsTask = Task {
             try? await Task.sleep(nanoseconds: 4_000_000_000)
             guard !Task.isCancelled else { return }
-            await MainActor.run { self.controlsVisible = false }
+            await MainActor.run {
+                guard self.isPlaying else { return }
+                self.controlsVisible = false
+            }
         }
     }
 

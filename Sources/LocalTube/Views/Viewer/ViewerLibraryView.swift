@@ -69,6 +69,23 @@ struct ViewerLibraryView: View {
             Text("Ask a grown-up to add some channels!")
                 .font(.ltBody)
                 .foregroundStyle(Color.ltTextSecondary)
+
+            // Grown-up hint: explicit affordance for the otherwise-invisible
+            // triple-tap editor-mode trigger. Visible only when the library is
+            // empty, so children don't see it once content is present.
+            HStack(spacing: 10) {
+                Image(systemName: "hand.tap.fill")
+                    .font(.system(size: 16))
+                Text("Grown-ups: triple-tap the bottom-right corner to set up channels")
+                    .font(.system(size: 16, weight: .medium))
+            }
+            .foregroundStyle(Color.ltTextTertiary)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 10)
+            .background(
+                Capsule().fill(Color.ltSurface.opacity(0.6))
+            )
+            .padding(.top, 16)
         }
     }
 

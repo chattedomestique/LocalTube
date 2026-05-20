@@ -63,7 +63,10 @@ struct VideoPlayerView: View {
             }
         }
         .onAppear  { startPlayback() }
-        .onDisappear { playerState.stop() }
+        .onDisappear {
+            playerState.stop()
+            playerState.cleanup()
+        }
         .toolbar(.hidden)
         .onKeyPress(.space)      { playerState.togglePlayPause(); return .handled }
         .onKeyPress(.leftArrow)  { playerState.skip(seconds: -10); return .handled }
@@ -234,8 +237,9 @@ private struct ScrubBar: View {
                     ? CGFloat(playerState.currentTime / playerState.duration)
                     : 0
                 let active   = isHovered || isDragging
-                let trackH   = CGFloat(active ? 8 : 4)
-                let knobX    = geo.size.width * progress - 8   // centre the 16-pt knob
+                let trackH   = CGFloat(active ? 10 : 6)
+                let knobSize: CGFloat = 24
+                let knobX    = geo.size.width * progress - knobSize / 2
 
                 ZStack(alignment: .leading) {
                     // Track background
@@ -248,13 +252,13 @@ private struct ScrubBar: View {
                         .fill(Color.ltAccent)
                         .frame(width: max(0, geo.size.width * progress), height: trackH)
 
-                    // Draggable knob
+                    // Draggable knob — always visible (10-ft UX), grows on hover
                     Circle()
                         .fill(Color.white)
-                        .frame(width: 16, height: 16)
-                        .shadow(color: .black.opacity(0.5), radius: 4, y: 2)
-                        .opacity(active ? 1 : 0)
-                        .offset(x: max(0, min(geo.size.width - 16, knobX)))
+                        .frame(width: knobSize, height: knobSize)
+                        .shadow(color: .black.opacity(0.55), radius: active ? 8 : 4, y: 2)
+                        .scaleEffect(active ? 1.15 : 1.0)
+                        .offset(x: max(0, min(geo.size.width - knobSize, knobX)))
                 }
                 .animation(.easeInOut(duration: 0.16), value: active)
                 .contentShape(Rectangle())
@@ -269,16 +273,16 @@ private struct ScrubBar: View {
                         .onEnded { _ in isDragging = false }
                 )
             }
-            .frame(height: 28)
+            .frame(height: 32)
 
             HStack {
                 Text(DurationFormatter.format(seconds: playerState.currentTime))
-                    .font(.system(size: 20, weight: .medium).monospacedDigit())
-                    .foregroundStyle(Color.white.opacity(0.9))
+                    .font(.system(size: 28, weight: .medium).monospacedDigit())
+                    .foregroundStyle(Color.white.opacity(0.95))
                 Spacer()
                 Text(DurationFormatter.format(seconds: playerState.duration))
-                    .font(.system(size: 20, weight: .medium).monospacedDigit())
-                    .foregroundStyle(Color.white.opacity(0.9))
+                    .font(.system(size: 28, weight: .medium).monospacedDigit())
+                    .foregroundStyle(Color.white.opacity(0.95))
             }
         }
     }

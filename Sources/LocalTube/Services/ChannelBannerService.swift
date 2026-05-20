@@ -24,7 +24,7 @@ enum ChannelBannerService {
             return destPath
         }
 
-        guard let ytDlp = findYtDlp() else { return nil }
+        let ytDlp = await ChannelResolverService.findYtDlp()
         let channelURL = makeChannelURL(youtubeChannelId)
 
         // --playlist-items 0 returns empty output; --playlist-items 1 fetches
@@ -117,8 +117,4 @@ enum ChannelBannerService {
         }
     }
 
-    private static func findYtDlp() -> String? {
-        let candidates = ["/opt/homebrew/bin/yt-dlp", "/usr/local/bin/yt-dlp"]
-        return candidates.first { FileManager.default.isExecutableFile(atPath: $0) }
-    }
 }

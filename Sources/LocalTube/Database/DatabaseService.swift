@@ -52,6 +52,31 @@ actor DatabaseService {
         sqlite3_exec(db, "ROLLBACK;", nil, nil, nil)
     }
 
+    // H5 fix: Batch helpers that wrap N writes in a single BEGIN/COMMIT so
+    // reorder operations are atomic and ~10× faster (one fsync vs. N fsyncs).
+
+    func updateChannelsBatched(_ channels: [Channel]) throws {
+        try beginTransaction()
+        do {
+            for ch in channels { try updateChannel(ch) }
+            try commitTransaction()
+        } catch {
+            rollbackTransaction()
+            throw error
+        }
+    }
+
+    func updateVideosBatched(_ videos: [Video]) throws {
+        try beginTransaction()
+        do {
+            for v in videos { try updateVideo(v) }
+            try commitTransaction()
+        } catch {
+            rollbackTransaction()
+            throw error
+        }
+    }
+
     // MARK: - Channels
 
     func fetchAllChannels() throws -> [Channel] {

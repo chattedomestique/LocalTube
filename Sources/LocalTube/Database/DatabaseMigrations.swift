@@ -18,6 +18,10 @@ enum DatabaseMigrations {
             try migration3AddThumbnailVersion(db: db)
             setUserVersion(db: db, version: 3)
         }
+        if currentVersion < 4 {
+            try migration4AddVideosSortIndex(db: db)
+            setUserVersion(db: db, version: 4)
+        }
     }
 
     // MARK: - Version Tracking
@@ -96,6 +100,17 @@ enum DatabaseMigrations {
 
     private static func migration3AddThumbnailVersion(db: OpaquePointer) throws {
         try exec(db: db, sql: "ALTER TABLE videos ADD COLUMN thumbnail_version INTEGER NOT NULL DEFAULT 0;")
+    }
+
+    // MARK: - Migration 4: Composite index for the hot-path videos query
+    //
+    // fetchVideos(forChannelId:) filters by channel_id and orders by sort_order.
+    // The existing idx_videos_channel_id covers the WHERE but forces a sort step
+    // for each channel page load; adding sort_order to the index lets SQLite
+    // satisfy the ORDER BY from the index directly.
+
+    private static func migration4AddVideosSortIndex(db: OpaquePointer) throws {
+        try exec(db: db, sql: "CREATE INDEX IF NOT EXISTS idx_videos_channel_sort ON videos(channel_id, sort_order);")
     }
 
     // MARK: - Helpers

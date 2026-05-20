@@ -64,7 +64,12 @@ final class DownloadService {
             v.downloadState = .queued
             v.downloadProgress = 0
             appState.updateVideo(v)
-            Task { try? await DatabaseService.shared.updateVideo(v) }
+            let snapshot = v
+            Task { [appState] in
+                await appState.persist("cancelDownload updateVideo") {
+                    try await DatabaseService.shared.updateVideo(snapshot)
+                }
+            }
         }
     }
 
@@ -90,7 +95,11 @@ final class DownloadService {
         resetVideo.downloadProgress = 0
         resetVideo.downloadError  = nil
         appState.updateVideo(resetVideo)
-        Task { try? await DatabaseService.shared.updateVideo(resetVideo) }
+        Task { [appState, resetVideo] in
+            await appState.persist("retry updateVideo") {
+                try await DatabaseService.shared.updateVideo(resetVideo)
+            }
+        }
 
         await enqueue(video: resetVideo, channel: channel)
     }
@@ -136,7 +145,10 @@ final class DownloadService {
                         v.downloadState = .error
                         v.downloadError = error.localizedDescription
                         appState.updateVideo(v)
-                        try? await DatabaseService.shared.updateVideo(v)
+                        let snapshot = v
+                        await appState.persist("download error updateVideo") {
+                            try await DatabaseService.shared.updateVideo(snapshot)
+                        }
                     }
                     AppLogger.error("Download failed: \(video.title) — \(error.localizedDescription)")
                     eventHandler?(.error(video.id, error.localizedDescription))
@@ -168,7 +180,10 @@ final class DownloadService {
             updatedVideo.title = fetchedTitle
             item.videoTitle = fetchedTitle
             appState?.updateVideo(updatedVideo)
-            try? await DatabaseService.shared.updateVideo(updatedVideo)
+            let snapshot = updatedVideo
+            await appState?.persist("download title updateVideo") {
+                try await DatabaseService.shared.updateVideo(snapshot)
+            }
         }
 
         // Ensure directories exist
@@ -291,29 +306,36 @@ final class DownloadService {
         return output.flatMap { Double($0) } ?? 0
     }
 
-    // M4 fix: Use `which` as primary resolution, fall back to known paths
+    // M4 fix: Resolve via `which` (honors $PATH, MacPorts, nix, custom prefixes)
+    // and cache the result. Cache is seeded eagerly by resolveToolPaths() and
+    // populated lazily otherwise; sync findX() returns the cached value or the
+    // fallback path so call sites inside downloadVideo() stay synchronous.
     private var cachedYtDlpPath: String?
     private var cachedFfprobePath: String?
 
     private func findYtDlp() -> String {
         if let cached = cachedYtDlpPath { return cached }
-        let candidates = ["/opt/homebrew/bin/yt-dlp", "/usr/local/bin/yt-dlp"]
-        let path = candidates.first { FileManager.default.isExecutableFile(atPath: $0) } ?? "yt-dlp"
-        cachedYtDlpPath = path
-        return path
+        let fallback = ["/opt/homebrew/bin/yt-dlp", "/usr/local/bin/yt-dlp"]
+            .first { FileManager.default.isExecutableFile(atPath: $0) } ?? "yt-dlp"
+        cachedYtDlpPath = fallback
+        return fallback
     }
 
     private func findFfprobe() -> String {
         if let cached = cachedFfprobePath { return cached }
-        let candidates = ["/opt/homebrew/bin/ffprobe", "/usr/local/bin/ffprobe"]
-        let path = candidates.first { FileManager.default.isExecutableFile(atPath: $0) } ?? "ffprobe"
-        cachedFfprobePath = path
-        return path
+        let fallback = ["/opt/homebrew/bin/ffprobe", "/usr/local/bin/ffprobe"]
+            .first { FileManager.default.isExecutableFile(atPath: $0) } ?? "ffprobe"
+        cachedFfprobePath = fallback
+        return fallback
     }
 
     func resolveToolPaths() async {
-        if let path = await ShellRunner.which("yt-dlp") { cachedYtDlpPath = path }
-        if let path = await ShellRunner.which("ffprobe") { cachedFfprobePath = path }
+        cachedYtDlpPath = await ShellRunner.resolveBinary("yt-dlp", fallbacks: [
+            "/opt/homebrew/bin/yt-dlp", "/usr/local/bin/yt-dlp",
+        ])
+        cachedFfprobePath = await ShellRunner.resolveBinary("ffprobe", fallbacks: [
+            "/opt/homebrew/bin/ffprobe", "/usr/local/bin/ffprobe",
+        ])
     }
 
     /// Re-fetches YouTube thumbnails for already-downloaded videos using yt-dlp.
@@ -360,7 +382,10 @@ final class DownloadService {
                 v.thumbnailPath = thumbnailPath
                 v.thumbnailVersion += 1   // bumps the localtube-thumb:// URL for cache busting
                 appState?.updateVideo(v)
-                try? await DatabaseService.shared.updateVideo(v)
+                let snapshot = v
+                await appState?.persist("refreshThumbnail updateVideo") {
+                    try await DatabaseService.shared.updateVideo(snapshot)
+                }
             }
         }
     }

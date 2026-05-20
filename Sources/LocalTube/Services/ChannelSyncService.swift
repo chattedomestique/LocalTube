@@ -18,10 +18,7 @@ enum ChannelSyncService {
     /// Returns an array of ChannelSyncEntry sorted oldest-first (yt-dlp default),
     /// or an empty array on any failure.
     static func fetchVideoList(youtubeChannelId: String) async -> [ChannelSyncEntry] {
-        guard let ytDlp = findYtDlp() else {
-            AppLogger.error("ChannelSyncService: yt-dlp not found")
-            return []
-        }
+        let ytDlp = await ChannelResolverService.findYtDlp()
 
         let channelURL = makeChannelURL(youtubeChannelId)
         AppLogger.info("ChannelSyncService: fetching video list for \(channelURL)")
@@ -81,8 +78,4 @@ enum ChannelSyncService {
         }
     }
 
-    private static func findYtDlp() -> String? {
-        let candidates = ["/opt/homebrew/bin/yt-dlp", "/usr/local/bin/yt-dlp"]
-        return candidates.first { FileManager.default.isExecutableFile(atPath: $0) }
-    }
 }

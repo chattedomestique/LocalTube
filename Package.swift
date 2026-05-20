@@ -20,6 +20,11 @@ let package = Package(
                 .copy("Resources"),
             ],
             swiftSettings: [
+                // Staying on v5 for now: enabling .v6 surfaces ~90 strict-
+                // concurrency errors (nonisolated global state in AppLogger,
+                // PINService, formatters; mutable buffer capture in
+                // ShellRunner). Tracked as a focused follow-up so the bulk
+                // improvements in this branch ship as a working build.
                 .swiftLanguageMode(.v5),
             ],
             linkerSettings: [

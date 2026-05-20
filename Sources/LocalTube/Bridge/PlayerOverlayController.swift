@@ -30,6 +30,10 @@ final class PlayerOverlayController {
     /// Called when the player is dismissed (back button or video end).
     var onDismiss: (() -> Void)?
 
+    // Single end-of-playback observer token. Re-used across show() calls so
+    // we don't accumulate one observer per video played in a session.
+    private var endObserverToken: NSObjectProtocol?
+
     // MARK: - Show / Hide
 
     func show(video: Video, appState: AppState) {
@@ -139,7 +143,13 @@ final class PlayerOverlayController {
     }
 
     private func observePlayerStop(state: PlayerState) {
-        NotificationCenter.default.addObserver(
+        // Tear down any prior registration so repeated show() calls don't
+        // accumulate observers that all fire on the next end-of-playback.
+        if let token = endObserverToken {
+            NotificationCenter.default.removeObserver(token)
+            endObserverToken = nil
+        }
+        endObserverToken = NotificationCenter.default.addObserver(
             forName: .AVPlayerItemDidPlayToEndTime,
             object: nil,
             queue: .main
@@ -152,11 +162,24 @@ final class PlayerOverlayController {
     }
 
     private func dismiss() {
+        if let token = endObserverToken {
+            NotificationCenter.default.removeObserver(token)
+            endObserverToken = nil
+        }
         if let panel = playerPanel, let parent = parentWindow {
             parent.removeChildWindow(panel)
             panel.orderOut(nil)
         }
         onDismiss?()
+    }
+
+    deinit {
+        if let token = endObserverToken {
+            NotificationCenter.default.removeObserver(token)
+        }
+        // PlayerState owns its time/itemEnd observers; tear them down too so the
+        // panel's AVPlayer stops emitting periodic callbacks after dismissal.
+        playerState?.cleanup()
     }
 }
 

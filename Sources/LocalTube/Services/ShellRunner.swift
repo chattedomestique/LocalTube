@@ -167,4 +167,19 @@ enum ShellRunner {
     static func which(_ name: String) async -> String? {
         try? await run("/usr/bin/which", args: [name])
     }
+
+    /// Resolves a binary by preferring `which` (honors $PATH, MacPorts, nix,
+    /// custom Homebrew prefixes), then falling back to the supplied candidate
+    /// list. Returns `name` unchanged as a last resort so callers still get a
+    /// usable string for error reporting via the launch validation in run().
+    static func resolveBinary(_ name: String, fallbacks: [String]) async -> String {
+        if let resolved = await which(name),
+           FileManager.default.isExecutableFile(atPath: resolved) {
+            return resolved
+        }
+        if let candidate = fallbacks.first(where: { FileManager.default.isExecutableFile(atPath: $0) }) {
+            return candidate
+        }
+        return name
+    }
 }

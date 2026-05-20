@@ -14,7 +14,7 @@ enum ChannelResolverService {
 
     /// Resolves a YouTube channel URL to its channel ID and display name.
     static func resolve(youtubeURL: String) async throws -> ResolvedChannel {
-        let ytDlp = findYtDlp()
+        let ytDlp = await findYtDlp()
         let json = try await ShellRunner.run(ytDlp, args: [
             "--dump-single-json",
             "--flat-playlist",
@@ -46,18 +46,22 @@ enum ChannelResolverService {
 
     /// Fetches all public video URLs from a channel (up to 200).
     /// Returns (videoURLs, process) — caller can cancel the process.
+    /// `ytDlpPath` must be a resolved binary path (use `findYtDlp()` to obtain).
+    /// Resolving inside this function would force the API async, which would
+    /// in turn force every Editor view to wrap calls in Task — the caller is
+    /// already in an async context, so it can pre-resolve.
     @discardableResult
     static func fetchVideoURLs(
+        ytDlpPath: String,
         channelURL: String,
         onProgress: @escaping @Sendable (Int) -> Void,
         onCompletion: @escaping @Sendable (Result<[String], Error>) -> Void
     ) -> Process {
-        let ytDlp = findYtDlp()
         // Use a lock-protected collector to safely accumulate URLs from the
         // streaming callback (which runs on a background thread).
         let collector = URLCollector()
 
-        return ShellRunner.stream(ytDlp, args: [
+        return ShellRunner.stream(ytDlpPath, args: [
             "--flat-playlist",
             "--print", "url",
             "--no-warnings",
@@ -79,7 +83,7 @@ enum ChannelResolverService {
 
     /// Extracts the YouTube channel ID from a video URL.
     static func extractChannelId(fromVideoURL url: String) async throws -> String {
-        let ytDlp = findYtDlp()
+        let ytDlp = await findYtDlp()
         return try await ShellRunner.run(ytDlp, args: [
             "--print", "channel_id",
             "--no-warnings",
@@ -90,10 +94,11 @@ enum ChannelResolverService {
 
     // MARK: - Private
 
-    private static func findYtDlp() -> String {
-
-        let candidates = ["/opt/homebrew/bin/yt-dlp", "/usr/local/bin/yt-dlp"]
-        return candidates.first { FileManager.default.fileExists(atPath: $0) } ?? "yt-dlp"
+    static func findYtDlp() async -> String {
+        await ShellRunner.resolveBinary("yt-dlp", fallbacks: [
+            "/opt/homebrew/bin/yt-dlp",
+            "/usr/local/bin/yt-dlp",
+        ])
     }
 }
 

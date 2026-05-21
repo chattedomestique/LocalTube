@@ -60,11 +60,15 @@ export default function PINEntry() {
   )
 
   const handleCancel = () => {
-    send({ type: 'exitEditorMode' })
+    // dismissPINEntry only closes the modal — doesn't mutate appMode like
+    // exitEditorMode does (which was the bug: exitEditorMode emits only
+    // appModeChanged, which doesn't carry showPINEntry, so the modal
+    // stayed up).
+    send({ type: 'dismissPINEntry' })
   }
 
   return (
-    <div className="modal-backdrop" role="presentation">
+    <div className="modal-backdrop" role="presentation" style={{ zIndex: 200 }}>
       <div
         className={`modal-panel ${shaking ? 'shake' : ''}`}
         role="dialog"

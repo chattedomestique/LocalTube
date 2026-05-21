@@ -42,7 +42,7 @@ export default function ProfilePicker() {
   }
 
   return (
-    <div role="dialog" aria-modal="true" aria-label="Pick a profile" style={{
+    <div role="dialog" aria-modal="true" aria-label="Pick a profile" className="lt-overlay-fade-in" style={{
       position: 'fixed',
       inset: 0,
       zIndex: 100,

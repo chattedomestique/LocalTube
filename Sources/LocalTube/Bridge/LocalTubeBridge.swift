@@ -65,7 +65,22 @@ final class LocalTubeBridge: NSObject, WKScriptMessageHandler {
         case .updateProfile:       handleUpdateProfile(payloadDict)
         case .deleteProfile:       handleDeleteProfile(payloadDict)
         case .setProfileChannels:  handleSetProfileChannels(payloadDict)
+        case .dismissPINEntry:     handleDismissPINEntry()
         }
+    }
+
+    // MARK: - PIN entry dismissal
+    //
+    // Closes the PIN modal without mutating appMode. The bridge only emits
+    // appModeChanged on exit; that event doesn't carry showPINEntry, so a
+    // raw exitEditorMode call leaves React with the modal still open.
+    // This dedicated handler emits a full state update so React sees the
+    // showPINEntry: false transition.
+
+    private func handleDismissPINEntry() {
+        guard let appState else { return }
+        appState.showPINEntry = false
+        emitter.emitStateUpdate(appState)
     }
 
     // MARK: - State

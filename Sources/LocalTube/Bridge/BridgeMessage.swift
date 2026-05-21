@@ -29,6 +29,7 @@ enum BridgeMessageType: String, Decodable {
     case updateProfile
     case deleteProfile
     case setProfileChannels
+    case dismissPINEntry
 }
 
 struct BridgeMessage: Decodable {

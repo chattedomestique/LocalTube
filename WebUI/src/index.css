@@ -591,6 +591,24 @@ input, textarea, [contenteditable] {
   contain: layout style paint;
 }
 
+/* ─── Generic fade-in for full-screen overlays (picker, etc.) ────────────── */
+@keyframes lt-overlay-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.lt-overlay-fade-in {
+  animation: lt-overlay-in 220ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+/* Modal panel content fade-in (independent of the backdrop's own fade).      */
+@keyframes lt-panel-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to   { opacity: 1; transform: scale(1); }
+}
+.lt-panel-in {
+  animation: lt-panel-in 220ms cubic-bezier(0.25, 1, 0.5, 1) both;
+}
+
 /* Header — elevation shadow on the sticky top bar. Toggled by an        */
 /* IntersectionObserver in Channel.tsx when the banner is essentially    */
 /* gone. CSS transition gives a smooth fade-in. No per-frame work.       */

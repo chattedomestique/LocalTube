@@ -1,7 +1,8 @@
-import type { CSSProperties } from 'react'
+import { useState, type CSSProperties, type ReactNode } from 'react'
 import { useAppStore } from '../store'
 import ChannelCard from '../components/ChannelCard'
 import ProfileAvatar from '../components/ProfileAvatar'
+import type { Profile } from '../types'
 
 export default function Library() {
   const { state, navigateTo, send } = useAppStore()
@@ -105,98 +106,73 @@ export default function Library() {
         <div style={{ flex: activeDownload ? 0 : 1 }} />
 
         {/* Right actions.
-            In viewer mode WITH an active profile, the only affordance is
-            the profile chip in the top-right — Editor + Settings live up
-            on the profile picker (parent-only, PIN-gated). When in editor
-            mode, parents get the editor toggle + settings + Manage as
-            before. */}
+            HIERARCHY:
+              1. Manage (primary CTA — the thing parents come here to do)
+              2. Settings (secondary — gear icon, label)
+              3. Exit (tertiary — door icon, label, subtle destructive tint)
+            All three use the same TopBarButton shell so heights, padding,
+            label sizes, and gaps match. Settings was a sun before — now a
+            standard gear, which is the universally-recognised icon. */}
         <div style={{
           display: 'flex',
           alignItems: 'center',
-          gap: 6,
+          gap: 8,
         } as CSSProperties}>
           {appMode === 'editor' ? (
             <>
-              <button
-                className={`lt-editor-toggle active`}
-                onClick={handleEditorToggle}
-                title="Exit editor mode"
-              >
-                <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-                  <rect x="2" y="6" width="9" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.5" fill="none" />
-                  <path d="M4.5 6V4C4.5 2.62 5.62 1.5 7 1.5C8.38 1.5 9.5 2.62 9.5 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none" />
-                </svg>
-                Editor
-              </button>
-              <button
-                className="lt-btn-ghost"
-                onClick={() => navigateTo({ screen: 'settings' })}
-                style={{
-                  padding: '6px 8px',
-                  borderRadius: 8,
-                  color: 'var(--text-secondary)',
-                }}
-                title="Settings"
-              >
-                <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-                  <circle cx="9" cy="9" r="2.5" stroke="currentColor" strokeWidth="1.5" />
-                  <path d="M9 1.5V3M9 15V16.5M16.5 9H15M3 9H1.5M14.48 3.52l-1.06 1.06M4.58 13.42l-1.06 1.06M14.48 14.48l-1.06-1.06M4.58 4.58l-1.06-1.06" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                </svg>
-              </button>
-              <button
-                className="lt-btn-primary"
+              <TopBarButton
+                kind="primary"
                 onClick={() => navigateTo({ screen: 'editor' })}
-                style={{ padding: '6px 12px', fontSize: 12, gap: 4 }}
-              >
-                <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-                  <path d="M9.5 1.5L11.5 3.5L4.5 10.5H2.5V8.5L9.5 1.5Z" stroke="white" strokeWidth="1.4" strokeLinejoin="round" fill="none" />
-                </svg>
-                Manage
-              </button>
+                label="Manage"
+                icon={(
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                    <path d="M10 1.5L12.5 4L4.5 12H2V9.5L10 1.5Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" fill="none" />
+                  </svg>
+                )}
+              />
+              <TopBarButton
+                kind="secondary"
+                onClick={() => navigateTo({ screen: 'settings' })}
+                label="Settings"
+                icon={(
+                  // Universally-recognised gear (replaces the prior sun)
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                    <circle cx="7" cy="7" r="2.2" stroke="currentColor" strokeWidth="1.4" fill="none" />
+                    <path d="M7 0.8v1.6M7 11.6v1.6M13.2 7h-1.6M2.4 7H0.8M11.38 2.62l-1.13 1.13M3.75 10.25l-1.13 1.13M11.38 11.38l-1.13-1.13M3.75 3.75l-1.13-1.13" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                  </svg>
+                )}
+              />
+              <TopBarButton
+                kind="exit"
+                onClick={handleEditorToggle}
+                label="Exit Editor"
+                icon={(
+                  // Open-door icon — clearly says "leave"
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                    <path d="M8 1.5H12V12.5H8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                    <path d="M9 7H2M2 7L4 5M2 7L4 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                )}
+              />
             </>
           ) : activeProfile ? (
             // Viewer + active profile: only the chip. Click → back to picker.
-            <button
-              onClick={() => send({ type: 'setActiveProfile', payload: { profileId: null } })}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10,
-                padding: '4px 14px 4px 4px',
-                borderRadius: 99,
-                background: 'rgba(255,255,255,0.04)',
-                border: '1px solid rgba(255,255,255,0.10)',
-                cursor: 'pointer',
-                color: 'var(--text-primary)',
-                transition: 'background 160ms ease, border-color 160ms ease',
-              }}
-              onMouseEnter={e => {
-                e.currentTarget.style.background = 'rgba(255,255,255,0.10)'
-                e.currentTarget.style.borderColor = 'rgba(255,255,255,0.22)'
-              }}
-              onMouseLeave={e => {
-                e.currentTarget.style.background = 'rgba(255,255,255,0.04)'
-                e.currentTarget.style.borderColor = 'rgba(255,255,255,0.10)'
-              }}
-              title="Switch profile"
-            >
-              <ProfileAvatar profile={activeProfile} size={36} />
-              <span style={{ fontSize: 15, fontWeight: 600 }}>{activeProfile.name}</span>
-            </button>
+            <ProfileChip profile={activeProfile} onClick={() =>
+              send({ type: 'setActiveProfile', payload: { profileId: null } })
+            } />
           ) : (
-            // Viewer + no profile (no profiles set up at all): keep the
-            // Editor toggle visible so the parent can still get in.
-            <button
-              className="lt-editor-toggle"
+            // Viewer + no profile (none set up): keep one Editor entry
+            // so the parent can still get in on a fresh install.
+            <TopBarButton
+              kind="secondary"
               onClick={handleEditorToggle}
-              title="Enter editor mode"
-            >
-              <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-                <rect x="2" y="6" width="9" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.5" fill="none" />
-                <path d="M4 6V4.5C4 3 5 1.5 6.5 1.5C8 1.5 9 3 9 4.5V6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none" />
-              </svg>
-              Editor
-            </button>
+              label="Editor"
+              icon={(
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                  <path d="M10 1.5L12.5 4L4.5 12H2V9.5L10 1.5Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" fill="none" />
+                </svg>
+              )}
+            />
           )}
         </div>
       </div>
@@ -306,5 +282,108 @@ export default function Library() {
         )}
       </div>
     </div>
+  )
+}
+
+// ─── Shared top-bar button ────────────────────────────────────────────────────
+// One canonical shell for every action in the library top bar. Same height,
+// same padding, same icon/label spacing — three visual kinds that map to the
+// hierarchy: primary (filled accent) → secondary (subtle surface) → exit
+// (subtle destructive tint). Animations are CSS-easy: 160ms color/bg ease.
+
+type TopBarButtonKind = 'primary' | 'secondary' | 'exit'
+
+function TopBarButton({
+  kind,
+  label,
+  icon,
+  onClick,
+}: {
+  kind: TopBarButtonKind
+  label: string
+  icon: ReactNode
+  onClick: () => void
+}) {
+  const [hovered, setHovered] = useState(false)
+
+  const palette = (() => {
+    switch (kind) {
+      case 'primary':
+        return {
+          bg:       hovered ? 'var(--accent-hover, #ad6df0)' : 'var(--accent)',
+          border:   'transparent',
+          color:    'white',
+        }
+      case 'secondary':
+        return {
+          bg:       hovered ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.04)',
+          border:   hovered ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.10)',
+          color:    hovered ? 'var(--text-primary)'   : 'var(--text-secondary)',
+        }
+      case 'exit':
+        return {
+          bg:       hovered ? 'rgba(248,113,113,0.14)' : 'rgba(248,113,113,0.06)',
+          border:   hovered ? 'rgba(248,113,113,0.40)' : 'rgba(248,113,113,0.22)',
+          color:    hovered ? '#fca5a5'                : '#f87171cc',
+        }
+    }
+  })()
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 6,
+        height: 34,
+        padding: '0 14px',
+        borderRadius: 10,
+        background: palette.bg,
+        border: `1px solid ${palette.border}`,
+        color: palette.color,
+        fontSize: 13,
+        fontWeight: 600,
+        letterSpacing: '-0.005em',
+        cursor: 'pointer',
+        outline: 'none',
+        transition: 'background 160ms ease, border-color 160ms ease, color 160ms ease',
+      }}
+    >
+      <span style={{ display: 'flex', alignItems: 'center' }}>{icon}</span>
+      <span>{label}</span>
+    </button>
+  )
+}
+
+// ─── Profile chip (viewer mode only) ──────────────────────────────────────────
+function ProfileChip({ profile, onClick }: { profile: Profile; onClick: () => void }) {
+  const [hovered, setHovered] = useState(false)
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      title="Switch profile"
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        padding: '4px 14px 4px 4px',
+        borderRadius: 99,
+        background: hovered ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.04)',
+        border: `1px solid ${hovered ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.10)'}`,
+        cursor: 'pointer',
+        color: 'var(--text-primary)',
+        transition: 'background 160ms ease, border-color 160ms ease',
+      }}
+    >
+      <ProfileAvatar profile={profile} size={36} />
+      <span style={{ fontSize: 15, fontWeight: 600 }}>{profile.name}</span>
+    </button>
   )
 }

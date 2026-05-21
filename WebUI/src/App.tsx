@@ -142,9 +142,14 @@ function AppContent() {
   return (
     <>
       {screen}
-      {/* PIN Entry modal overlays whatever screen is shown */}
-      {showPINEntry && <PINEntry />}
+      {/* ProfilePicker comes before PINEntry in source order so PIN
+          modals stack visually on TOP of the picker. (Source order =
+          z-index when both use the default stacking context.) Otherwise
+          clicking Editor/Settings on the picker pops the PIN modal
+          behind the picker — invisible until something dismissed the
+          picker. */}
       {showProfilePicker && <ProfilePicker />}
+      {showPINEntry && <PINEntry />}
     </>
   )
 }

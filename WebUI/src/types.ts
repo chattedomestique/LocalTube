@@ -131,6 +131,7 @@ export type BridgeMessage =
   | { type: 'updateProfile';       payload: { id: string; name?: string; emoji?: string; icon?: string; color?: string } }
   | { type: 'deleteProfile';       payload: { profileId: string } }
   | { type: 'setProfileChannels';  payload: { profileId: string; channelIds: string[] } }
+  | { type: 'dismissPINEntry' }
 
 // ─── Navigation ────────────────────────────────────────────────────────────
 export type NavScreen = 'library' | 'channel' | 'settings' | 'editor' | 'profiles'

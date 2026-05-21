@@ -34,46 +34,37 @@ export default function Channel() {
   const [searchQuery, setSearchQuery] = useState('')
   const scrollRef = useRef<HTMLDivElement>(null)
 
-  // Scroll-driven banner collapse — driven via direct DOM mutation, NOT
-  // React state. Using setState here meant every scroll tick was
-  // setState → reconcile → render → DOM patch, so at fast scroll React
-  // dropped frames and the collapse animation visibly snapped to discrete
-  // positions. By writing styles straight to refs inside a rAF callback we
-  // stay on the compositor's fast path and the collapse tracks the scroll
-  // wheel exactly.
-  const bannerRef    = useRef<HTMLDivElement>(null)
+  // The banner is now inside the scroll container as the first child, so it
+  // scrolls away naturally. The top bar + search bar are position: sticky,
+  // so they latch to the viewport top as the banner passes. Browser handles
+  // 100% of the collapse on the compositor — no JS-driven layout per frame.
+  //
+  // The scroll handler is now ONLY responsible for two compositor-only
+  // effects:
+  //   1. Parallax translateY on the banner img (transform — no layout)
+  //   2. Elevation shadow on the top bar (box-shadow — no layout)
+  // Both are written straight to refs from inside a rAF callback.
   const bannerImgRef = useRef<HTMLImageElement>(null)
-  const titleRef     = useRef<HTMLHeadingElement>(null)
   const topBarRef    = useRef<HTMLDivElement>(null)
   const rafRef       = useRef<number | null>(null)
   const hasBannerRef = useRef(false)
 
-  // Imperatively apply the visual state for a given scrollTop. Pulled out so
-  // we can call it both from the scroll handler and from the channel/page
-  // reset effects (to snap back to the expanded state on navigation).
   const applyScrollUI = useCallback((y: number) => {
-    const rawProgress = hasBannerRef.current
-      ? Math.min(1, Math.max(0, y / COLLAPSE_DISTANCE))
-      : 0
-    const progress = easeOutCubic(rawProgress)
-
-    const banner = bannerRef.current
-    if (banner) {
-      banner.style.height  = `${BANNER_HEIGHT * (1 - progress)}px`
-      banner.style.opacity = `${1 - progress}`
-    }
     const img = bannerImgRef.current
-    if (img) {
-      img.style.transform = `translateY(${-progress * BANNER_HEIGHT * 0.35}px)`
-    }
-    const title = titleRef.current
-    if (title) {
-      title.style.fontSize = `${28 - 6 * progress}px`
+    if (img && hasBannerRef.current) {
+      // Parallax: img moves at 0.5× scroll speed so the banner photo
+      // appears to lag behind the page content as it scrolls away.
+      const clamped = Math.min(y, BANNER_HEIGHT)
+      img.style.transform = `translate3d(0, ${clamped * 0.5}px, 0)`
     }
     const topBar = topBarRef.current
     if (topBar) {
-      topBar.style.boxShadow = progress > 0
-        ? `0 6px 22px rgba(0,0,0,${0.35 * progress})`
+      // Shadow fades in as the banner crosses out — start ~100px before
+      // it's fully gone so the elevation appears smoothly, not as a snap.
+      const shadowStart = Math.max(0, BANNER_HEIGHT - 100)
+      const t = Math.max(0, Math.min(1, (y - shadowStart) / 100))
+      topBar.style.boxShadow = t > 0
+        ? `0 6px 22px rgba(0,0,0,${0.35 * t})`
         : 'none'
     }
   }, [])
@@ -95,9 +86,7 @@ export default function Channel() {
   useEffect(() => { setCurrentPage(0) }, [nav.channelId, searchQuery])
 
   // Scroll content area back to top on every page change and on channel
-  // change — without resetting the visual collapse state, a user scrolled
-  // deep in one channel would arrive at the next one with the banner
-  // already gone.
+  // change. applyScrollUI(0) resets the parallax/shadow to baseline.
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: 0, behavior: 'instant' })
     applyScrollUI(0)
@@ -335,11 +324,10 @@ export default function Channel() {
       {/* ── Ambient background (rolling N-layer blend) ────────────────────── */}
       {bgLayers.length > 0 && (
         <div style={{ position: 'absolute', inset: 0, zIndex: 0, pointerEvents: 'none' }}>
-          {bgLayers.map((layer, i) => (
+          {bgLayers.map(layer => (
             <BgBlurLayer
               key={layer.key}
               video={layer.video}
-              isCurrent={i === bgLayers.length - 1}
               fadeMs={BG_FADE_MS}
             />
           ))}
@@ -361,18 +349,27 @@ export default function Channel() {
         </div>
       )}
 
-      {/* ── Banner hero ─ height/opacity/img-transform driven via ref by the
-          scroll handler. Initial values reflect the expanded state. ─────── */}
+      {/* ── Scroll container ─ banner + sticky header + search + grid all
+          live inside this one scrolling element. The browser handles the
+          banner collapse natively as scroll content; the top bar and
+          search bar use position:sticky so they latch to the viewport top
+          once they reach it. No JS-driven layout per frame. */}
+      <div ref={scrollRef} onScroll={handleScroll} style={{
+        position: 'relative',
+        zIndex: 1,
+        flex: 1,
+        overflowY: 'auto',
+      }}>
+
+      {/* Banner hero — natural scroll content, fixed height.
+          Img has compositor-only parallax via translate3d, set by the
+          scroll handler. */}
       {hasBanner ? (
-        <div ref={bannerRef} style={{
+        <div style={{
           position: 'relative',
-          zIndex: 1,
           width: '100%',
           height: BANNER_HEIGHT,
-          opacity: 1,
-          flexShrink: 0,
           overflow: 'hidden',
-          willChange: 'height, opacity',
         }}>
           <img
             ref={bannerImgRef}
@@ -382,12 +379,10 @@ export default function Channel() {
               position: 'absolute',
               inset: 0,
               width: '100%',
-              // Unscaled height so the image clips upward via translateY
-              // (set by the scroll handler) — YouTube-style parallax away.
               height: BANNER_HEIGHT,
               objectFit: 'cover',
               filter: 'brightness(0.7) saturate(1.1)',
-              transform: 'translateY(0px)',
+              transform: 'translate3d(0, 0, 0)',
               willChange: 'transform',
             }}
             onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
@@ -401,12 +396,12 @@ export default function Channel() {
         </div>
       ) : null}
 
-      {/* Top bar — sticky-ish: stays put while content scrolls underneath.
-          boxShadow is driven via ref by the scroll handler (no React state
-          → no re-renders on scroll → no frame drops at speed). */}
+      {/* Sticky top bar — latches to viewport top as banner scrolls past.
+          boxShadow alpha is driven via ref by the scroll handler. */}
       <div ref={topBarRef} style={{
-        position: 'relative',
-        zIndex: 2,
+        position: 'sticky',
+        top: 0,
+        zIndex: 3,
         display: 'flex',
         alignItems: 'center',
         padding: '0 40px',
@@ -417,7 +412,6 @@ export default function Channel() {
         WebkitBackdropFilter: 'blur(28px) saturate(200%)',
         borderBottom: '0.5px solid rgba(255,255,255,0.1)',
         boxShadow: 'none',
-        flexShrink: 0,
         gap: 12,
       }}>
         {/* Back button */}
@@ -440,11 +434,10 @@ export default function Channel() {
             <span style={{ fontSize: 20 }}>{channel.emoji}</span>
           )}
           <div>
-            <h1 ref={titleRef} style={{
+            <h1 style={{
               fontSize: 28,
               fontWeight: 800,
               letterSpacing: '-0.02em',
-              // fontSize is updated via ref by the scroll handler.
             }}>
               {channel.displayName}
             </h1>
@@ -609,13 +602,14 @@ export default function Channel() {
         </div>
       </div>
 
-      {/* Search bar */}
+      {/* Sticky search bar — latches under the top bar (top: 80) once it
+          has scrolled into position. */}
       {sortedVideos.length > 0 && (
         <div style={{
-          position: 'relative',
-          zIndex: 1,
+          position: 'sticky',
+          top: 80,
+          zIndex: 2,
           padding: '12px 44px',
-          flexShrink: 0,
           background: 'rgba(13,13,15,0.55)',
           backdropFilter: 'blur(16px)',
           WebkitBackdropFilter: 'blur(16px)',
@@ -678,13 +672,11 @@ export default function Channel() {
         </div>
       )}
 
-      {/* Content */}
-      <div ref={scrollRef} onScroll={handleScroll} style={{
-        position: 'relative',
-        zIndex: 1,
-        flex: 1,
-        overflowY: 'auto',
+      {/* Content area — block child of the scroll container. min-height
+          keeps the empty state centered nicely without the old flex:1. */}
+      <div style={{
         padding: '44px',
+        minHeight: 'calc(100vh - 200px)',
       }}>
         {sortedVideos.length === 0 ? (
           <div style={{
@@ -692,7 +684,7 @@ export default function Channel() {
             flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center',
-            height: '100%',
+            minHeight: 480,
             gap: 12,
           }}>
             <div style={{
@@ -752,7 +744,7 @@ export default function Channel() {
             flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center',
-            height: '100%',
+            minHeight: 360,
             gap: 12,
           }}>
             <div style={{
@@ -848,6 +840,8 @@ export default function Channel() {
           </div>
         )}
       </div>
+
+      </div>{/* /scroll container */}
 
       {/* Delete channel confirm modal */}
       {showDeleteConfirm && (
@@ -945,27 +939,30 @@ export default function Channel() {
 }
 
 // ─── Ambient blur layer ─────────────────────────────────────────────────────
-// One layer of the rolling-stack background. Mounts at opacity 0 then
-// transitions to its target opacity (1 if it's the newest layer, 0 if it
-// has been overtaken by newer layers). The two-rAF "enter" pattern is
-// important: rendering directly at the target opacity would skip the
-// fade-in entirely. We pre-render at 0, wait for the browser to commit
-// that frame, then flip to target so CSS interpolates between them.
+// One layer of the rolling-stack background. Each new layer mounts at
+// opacity 0 then transitions in to opacity 1 — and stays there. Older
+// layers are *not* faded out: they sit at opacity 1 underneath newer
+// layers and get covered as those newer layers reach full opacity.
 //
-// All layers in the stack are mounted simultaneously with their own
-// in-flight opacity transitions, so the visible bg is always a *blend*
-// rather than the result of a discrete A→B crossfade. That's what makes
-// the motion read as liquid rather than blinky.
-function BgBlurLayer({ video, isCurrent, fadeMs }: {
+// This eliminates the fade-to-black problem of crossfades — at no point
+// during the transition does the cumulative visible opacity drop below
+// 1, because a new layer at, say, opacity 0.5 sitting on top of a prior
+// layer at opacity 1 composites to full intensity (the prior bleeds
+// through everywhere the new is < 1). When the new layer hits opacity 1
+// it fully obscures the layers beneath; they stay mounted but invisible
+// until sliced from the array by the MAX_BG_LAYERS cap, at which point
+// removing them is visually a no-op.
+//
+// The two-rAF "enter" pattern is important: rendering directly at the
+// target opacity would skip the fade-in entirely. We pre-render at 0,
+// wait for the browser to commit that frame, then flip to target so CSS
+// interpolates between them.
+function BgBlurLayer({ video, fadeMs }: {
   video: Video
-  isCurrent: boolean
   fadeMs: number
 }) {
   const [entered, setEntered] = useState(false)
   useEffect(() => {
-    // Double-rAF so React's commit + browser paint at opacity 0 happens
-    // before we flip to target. A single rAF can be coalesced into the
-    // same paint pass and skip the transition.
     let id2: number | null = null
     const id1 = requestAnimationFrame(() => {
       id2 = requestAnimationFrame(() => setEntered(true))
@@ -976,7 +973,7 @@ function BgBlurLayer({ video, isCurrent, fadeMs }: {
     }
   }, [])
 
-  const opacity = !entered ? 0 : (isCurrent ? 1 : 0)
+  const opacity = entered ? 1 : 0
 
   return (
     <div style={{

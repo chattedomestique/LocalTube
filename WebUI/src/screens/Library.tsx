@@ -1,6 +1,7 @@
 import type { CSSProperties } from 'react'
 import { useAppStore } from '../store'
 import ChannelCard from '../components/ChannelCard'
+import ProfileAvatar from '../components/ProfileAvatar'
 
 export default function Library() {
   const { state, navigateTo, send } = useAppStore()
@@ -103,86 +104,98 @@ export default function Library() {
 
         <div style={{ flex: activeDownload ? 0 : 1 }} />
 
-        {/* Right actions */}
+        {/* Right actions.
+            In viewer mode WITH an active profile, the only affordance is
+            the profile chip in the top-right — Editor + Settings live up
+            on the profile picker (parent-only, PIN-gated). When in editor
+            mode, parents get the editor toggle + settings + Manage as
+            before. */}
         <div style={{
           display: 'flex',
           alignItems: 'center',
           gap: 6,
         } as CSSProperties}>
-          {/* Active profile chip — click to switch. Hidden in editor mode. */}
-          {appMode !== 'editor' && activeProfile && (
+          {appMode === 'editor' ? (
+            <>
+              <button
+                className={`lt-editor-toggle active`}
+                onClick={handleEditorToggle}
+                title="Exit editor mode"
+              >
+                <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+                  <rect x="2" y="6" width="9" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.5" fill="none" />
+                  <path d="M4.5 6V4C4.5 2.62 5.62 1.5 7 1.5C8.38 1.5 9.5 2.62 9.5 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none" />
+                </svg>
+                Editor
+              </button>
+              <button
+                className="lt-btn-ghost"
+                onClick={() => navigateTo({ screen: 'settings' })}
+                style={{
+                  padding: '6px 8px',
+                  borderRadius: 8,
+                  color: 'var(--text-secondary)',
+                }}
+                title="Settings"
+              >
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                  <circle cx="9" cy="9" r="2.5" stroke="currentColor" strokeWidth="1.5" />
+                  <path d="M9 1.5V3M9 15V16.5M16.5 9H15M3 9H1.5M14.48 3.52l-1.06 1.06M4.58 13.42l-1.06 1.06M14.48 14.48l-1.06-1.06M4.58 4.58l-1.06-1.06" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                </svg>
+              </button>
+              <button
+                className="lt-btn-primary"
+                onClick={() => navigateTo({ screen: 'editor' })}
+                style={{ padding: '6px 12px', fontSize: 12, gap: 4 }}
+              >
+                <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+                  <path d="M9.5 1.5L11.5 3.5L4.5 10.5H2.5V8.5L9.5 1.5Z" stroke="white" strokeWidth="1.4" strokeLinejoin="round" fill="none" />
+                </svg>
+                Manage
+              </button>
+            </>
+          ) : activeProfile ? (
+            // Viewer + active profile: only the chip. Click → back to picker.
             <button
-              className="lt-btn-ghost"
               onClick={() => send({ type: 'setActiveProfile', payload: { profileId: null } })}
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: 8,
-                padding: '5px 12px 5px 5px',
+                gap: 10,
+                padding: '4px 14px 4px 4px',
                 borderRadius: 99,
-                background: 'rgba(255,255,255,0.06)',
-                border: '0.5px solid rgba(255,255,255,0.13)',
+                background: 'rgba(255,255,255,0.04)',
+                border: '1px solid rgba(255,255,255,0.10)',
+                cursor: 'pointer',
+                color: 'var(--text-primary)',
+                transition: 'background 160ms ease, border-color 160ms ease',
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.background = 'rgba(255,255,255,0.10)'
+                e.currentTarget.style.borderColor = 'rgba(255,255,255,0.22)'
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background = 'rgba(255,255,255,0.04)'
+                e.currentTarget.style.borderColor = 'rgba(255,255,255,0.10)'
               }}
               title="Switch profile"
             >
-              <span style={{ fontSize: 22, lineHeight: 1 }}>{activeProfile.emoji || '🙂'}</span>
-              <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>
-                {activeProfile.name}
-              </span>
+              <ProfileAvatar profile={activeProfile} size={36} />
+              <span style={{ fontSize: 15, fontWeight: 600 }}>{activeProfile.name}</span>
             </button>
-          )}
-
-          {/* Editor mode toggle */}
-          <button
-            className={`lt-editor-toggle${appMode === 'editor' ? ' active' : ''}`}
-            onClick={handleEditorToggle}
-          >
-            <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-              {appMode === 'editor' ? (
-                // Unlock icon
-                <>
-                  <rect x="2" y="6" width="9" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.5" fill="none" />
-                  <path d="M4.5 6V4C4.5 2.62 5.62 1.5 7 1.5C8.38 1.5 9.5 2.62 9.5 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none" />
-                </>
-              ) : (
-                // Lock icon
-                <>
-                  <rect x="2" y="6" width="9" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.5" fill="none" />
-                  <path d="M4 6V4.5C4 3 5 1.5 6.5 1.5C8 1.5 9 3 9 4.5V6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none" />
-                </>
-              )}
-            </svg>
-            {appMode === 'editor' ? 'Editor' : 'Editor'}
-          </button>
-
-          {/* Settings */}
-          <button
-            className="lt-btn-ghost"
-            onClick={() => navigateTo({ screen: 'settings' })}
-            style={{
-              padding: '6px 8px',
-              borderRadius: 8,
-              color: 'var(--text-secondary)',
-            }}
-            title="Settings"
-          >
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-              <circle cx="9" cy="9" r="2.5" stroke="currentColor" strokeWidth="1.5" />
-              <path d="M9 1.5V3M9 15V16.5M16.5 9H15M3 9H1.5M14.48 3.52l-1.06 1.06M4.58 13.42l-1.06 1.06M14.48 14.48l-1.06-1.06M4.58 4.58l-1.06-1.06" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-            </svg>
-          </button>
-
-          {/* Go to Editor screen */}
-          {appMode === 'editor' && (
+          ) : (
+            // Viewer + no profile (no profiles set up at all): keep the
+            // Editor toggle visible so the parent can still get in.
             <button
-              className="lt-btn-primary"
-              onClick={() => navigateTo({ screen: 'editor' })}
-              style={{ padding: '6px 12px', fontSize: 12, gap: 4 }}
+              className="lt-editor-toggle"
+              onClick={handleEditorToggle}
+              title="Enter editor mode"
             >
               <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-                <path d="M9.5 1.5L11.5 3.5L4.5 10.5H2.5V8.5L9.5 1.5Z" stroke="white" strokeWidth="1.4" strokeLinejoin="round" fill="none" />
+                <rect x="2" y="6" width="9" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.5" fill="none" />
+                <path d="M4 6V4.5C4 3 5 1.5 6.5 1.5C8 1.5 9 3 9 4.5V6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none" />
               </svg>
-              Manage
+              Editor
             </button>
           )}
         </div>

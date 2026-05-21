@@ -14,6 +14,10 @@ struct Profile: Identifiable, Codable, Hashable, Sendable {
     let id: UUID
     var name: String
     var emoji: String?
+    /// Phosphor icon name (e.g. "Heart", "Rocket"). Resolved client-side.
+    var icon: String?
+    /// Profile color key (e.g. "coral", "sky") from PROFILE_COLORS.
+    var color: String?
     var sortOrder: Int
     let createdAt: Date
 
@@ -21,12 +25,16 @@ struct Profile: Identifiable, Codable, Hashable, Sendable {
         id: UUID = UUID(),
         name: String,
         emoji: String? = nil,
+        icon: String? = nil,
+        color: String? = nil,
         sortOrder: Int = 0,
         createdAt: Date = Date()
     ) {
         self.id = id
         self.name = name
         self.emoji = emoji
+        self.icon = icon
+        self.color = color
         self.sortOrder = sortOrder
         self.createdAt = createdAt
     }

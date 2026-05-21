@@ -204,6 +204,8 @@ extension Profile {
             "createdAt": sharedISO8601Formatter.string(from: createdAt),
         ]
         if let emoji = emoji { p["emoji"] = emoji }
+        if let icon  = icon  { p["icon"]  = icon  }
+        if let color = color { p["color"] = color }
         return p
     }
 }

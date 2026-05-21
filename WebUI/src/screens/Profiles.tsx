@@ -1,11 +1,16 @@
 import { useState } from 'react'
 import { useAppStore } from '../store'
 import type { Profile } from '../types'
+import ProfileAvatar from '../components/ProfileAvatar'
+import IconPicker from '../components/IconPicker'
+import ColorPicker from '../components/ColorPicker'
+import { colorHex, DEFAULT_PROFILE_COLOR } from '../lib/profileColors'
 
 /**
  * Editor-mode screen for managing profiles. Lives under the Editor area;
- * reached from the Editor top bar. Lets parents create, rename,
- * re-emoji, delete profiles, and pick which channels each profile sees.
+ * reached from the Editor top bar. Lets parents create, customize
+ * (icon + color), rename, delete profiles, and pick which channels each
+ * profile sees.
  */
 export default function Profiles() {
   const { state, navigateTo, send } = useAppStore()
@@ -18,12 +23,18 @@ export default function Profiles() {
     sortedProfiles[0]?.id ?? null
   )
   const [showAdd, setShowAdd] = useState(false)
-  const [newName, setNewName] = useState('')
-  const [newEmoji, setNewEmoji] = useState('')
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
+
+  // Editor draft state for the inline rename/customize panel
   const [editName, setEditName] = useState('')
-  const [editEmoji, setEditEmoji] = useState('')
+  const [editIcon, setEditIcon] = useState<string | undefined>(undefined)
+  const [editColor, setEditColor] = useState<string>(DEFAULT_PROFILE_COLOR)
+
+  // "Add profile" draft state
+  const [newName, setNewName] = useState('')
+  const [newIcon, setNewIcon] = useState<string | undefined>('Smiley')
+  const [newColor, setNewColor] = useState<string>(DEFAULT_PROFILE_COLOR)
 
   const selected = sortedProfiles.find(p => p.id === selectedId) ?? sortedProfiles[0] ?? null
   const assigned = new Set(selected ? (profileChannels[selected.id] ?? []) : [])
@@ -31,23 +42,37 @@ export default function Profiles() {
   const handleAdd = () => {
     const trimmed = newName.trim()
     if (!trimmed) return
-    send({ type: 'addProfile', payload: { name: trimmed, emoji: newEmoji || undefined } })
+    send({
+      type: 'addProfile',
+      payload: {
+        name: trimmed,
+        icon: newIcon,
+        color: newColor,
+      },
+    })
     setNewName('')
-    setNewEmoji('')
+    setNewIcon('Smiley')
+    setNewColor(DEFAULT_PROFILE_COLOR)
     setShowAdd(false)
   }
 
-  const handleEditStart = (p: Profile) => {
+  const startEdit = (p: Profile) => {
     setEditingId(p.id)
     setEditName(p.name)
-    setEditEmoji(p.emoji ?? '')
+    setEditIcon(p.icon)
+    setEditColor(p.color ?? DEFAULT_PROFILE_COLOR)
   }
 
-  const handleEditSave = () => {
+  const saveEdit = () => {
     if (!editingId) return
     send({
       type: 'updateProfile',
-      payload: { id: editingId, name: editName.trim(), emoji: editEmoji || '' },
+      payload: {
+        id: editingId,
+        name: editName.trim(),
+        icon: editIcon ?? '',
+        color: editColor,
+      },
     })
     setEditingId(null)
   }
@@ -64,12 +89,8 @@ export default function Profiles() {
   const toggleChannel = (channelId: string) => {
     if (!selected) return
     const current = new Set(profileChannels[selected.id] ?? [])
-    if (current.has(channelId)) {
-      current.delete(channelId)
-    } else {
-      current.add(channelId)
-    }
-    // Preserve channel sort order in the assignment list
+    if (current.has(channelId)) current.delete(channelId)
+    else current.add(channelId)
     const ordered = sortedChannels.filter(c => current.has(c.id)).map(c => c.id)
     send({
       type: 'setProfileChannels',
@@ -124,7 +145,7 @@ export default function Profiles() {
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
         {/* Sidebar: profile list */}
         <div style={{
-          width: 260,
+          width: 280,
           borderRight: '1px solid var(--border)',
           background: 'var(--surface)',
           display: 'flex',
@@ -140,7 +161,7 @@ export default function Profiles() {
                 flexDirection: 'column',
                 alignItems: 'center',
                 padding: '32px 12px',
-                gap: 8,
+                gap: 10,
                 textAlign: 'center',
               }}>
                 <span style={{ fontSize: 32 }}>👤</span>
@@ -150,7 +171,7 @@ export default function Profiles() {
                 <button
                   className="lt-btn-primary"
                   onClick={() => setShowAdd(true)}
-                  style={{ marginTop: 8, fontSize: 12 }}
+                  style={{ marginTop: 6, fontSize: 12 }}
                 >
                   Create First Profile
                 </button>
@@ -165,14 +186,12 @@ export default function Profiles() {
                     key={p.id}
                     onClick={() => { setSelectedId(p.id); setEditingId(null) }}
                     style={{
-                      padding: '8px 10px',
-                      borderRadius: 9,
-                      background: isSelected
-                        ? 'var(--accent-dim)'
-                        : 'transparent',
+                      padding: '10px',
+                      borderRadius: 10,
+                      background: isSelected ? 'var(--accent-dim)' : 'transparent',
                       border: '1px solid',
                       borderColor: isSelected ? 'rgba(155,93,229,0.3)' : 'transparent',
-                      marginBottom: 2,
+                      marginBottom: 4,
                       cursor: 'pointer',
                       transition: 'background 140ms ease',
                     }}
@@ -180,53 +199,47 @@ export default function Profiles() {
                     {isEditing ? (
                       <div
                         onClick={e => e.stopPropagation()}
-                        style={{ display: 'flex', flexDirection: 'column', gap: 6 }}
+                        style={{ display: 'flex', flexDirection: 'column', gap: 10 }}
                       >
-                        <div style={{ display: 'flex', gap: 6 }}>
-                          <input
-                            value={editEmoji}
-                            onChange={e => setEditEmoji(e.target.value)}
-                            maxLength={2}
-                            placeholder="🙂"
-                            style={{
-                              width: 36,
-                              fontSize: 18,
-                              textAlign: 'center',
-                              background: 'var(--surface-el)',
-                              border: '1px solid var(--border)',
-                              borderRadius: 6,
-                              padding: '4px',
-                              color: 'var(--text-primary)',
-                            }}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <ProfileAvatar
+                            profile={{ name: editName, icon: editIcon, color: editColor, emoji: undefined }}
+                            size={48}
                           />
                           <input
                             value={editName}
                             onChange={e => setEditName(e.target.value)}
                             onKeyDown={e => {
-                              if (e.key === 'Enter') handleEditSave()
+                              if (e.key === 'Enter') saveEdit()
                               if (e.key === 'Escape') setEditingId(null)
                             }}
                             autoFocus
                             style={{
                               flex: 1,
-                              fontSize: 13,
+                              fontSize: 14,
                               background: 'var(--surface-el)',
                               border: '1px solid var(--border)',
                               borderRadius: 6,
-                              padding: '4px 8px',
+                              padding: '6px 10px',
                               color: 'var(--text-primary)',
                               outline: 'none',
                             }}
                           />
                         </div>
+                        <ColorPicker value={editColor} onChange={setEditColor} />
+                        <IconPicker
+                          value={editIcon}
+                          onChange={setEditIcon}
+                          color={colorHex(editColor)}
+                        />
                         <div style={{ display: 'flex', gap: 5 }}>
-                          <button className="lt-btn-xs primary" onClick={handleEditSave}>Save</button>
+                          <button className="lt-btn-xs primary" onClick={saveEdit}>Save</button>
                           <button className="lt-btn-xs secondary" onClick={() => setEditingId(null)}>Cancel</button>
                         </div>
                       </div>
                     ) : (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <span style={{ fontSize: 28 }}>{p.emoji || '🙂'}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <ProfileAvatar profile={p} size={44} />
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{
                             fontSize: 14,
@@ -245,8 +258,8 @@ export default function Profiles() {
                         <div style={{ display: 'flex', gap: 2 }}>
                           <button
                             className="lt-row-btn"
-                            onClick={e => { e.stopPropagation(); handleEditStart(p) }}
-                            title="Rename"
+                            onClick={e => { e.stopPropagation(); startEdit(p) }}
+                            title="Edit"
                           >
                             <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
                               <path d="M7.5 1.5L9 3L3.5 8.5H2V7L7.5 1.5Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" fill="none" />
@@ -276,8 +289,8 @@ export default function Profiles() {
         <div style={{ flex: 1, overflowY: 'auto', padding: 20 }}>
           {selected ? (
             <>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18 }}>
-                <span style={{ fontSize: 36 }}>{selected.emoji || '🙂'}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 20 }}>
+                <ProfileAvatar profile={selected} size={56} />
                 <div>
                   <h2 style={{ fontSize: 22, marginBottom: 2 }}>{selected.name}'s channels</h2>
                   <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
@@ -368,55 +381,51 @@ export default function Profiles() {
       {/* Add profile modal */}
       {showAdd && (
         <div className="modal-backdrop" role="presentation">
-          <div className="modal-panel" role="dialog" aria-modal="true" aria-label="New profile" style={{ width: 380, padding: 28 }}>
-            <h2 style={{ fontSize: 18, marginBottom: 14 }}>New Profile</h2>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <input
-                  value={newEmoji}
-                  onChange={e => setNewEmoji(e.target.value)}
-                  maxLength={2}
-                  placeholder="🙂"
-                  style={{
-                    width: 56,
-                    fontSize: 24,
-                    textAlign: 'center',
-                    background: 'var(--surface-el)',
-                    border: '1px solid var(--border)',
-                    borderRadius: 8,
-                    padding: '8px',
-                    color: 'var(--text-primary)',
-                  }}
-                />
-                <input
-                  value={newName}
-                  onChange={e => setNewName(e.target.value)}
-                  placeholder="Name (e.g. Alice)"
-                  autoFocus
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') handleAdd()
-                    if (e.key === 'Escape') setShowAdd(false)
-                  }}
-                  style={{
-                    flex: 1,
-                    fontSize: 14,
-                    background: 'var(--surface-el)',
-                    border: '1px solid var(--border)',
-                    borderRadius: 8,
-                    padding: '10px 12px',
-                    color: 'var(--text-primary)',
-                    outline: 'none',
-                  }}
-                />
-              </div>
-              <p style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
-                You can pick which channels this profile sees after creating it.
-              </p>
+          <div className="modal-panel" role="dialog" aria-modal="true" aria-label="New profile" style={{ width: 460, padding: 32 }}>
+            <h2 style={{ fontSize: 20, marginBottom: 18 }}>New Profile</h2>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 18 }}>
+              <ProfileAvatar
+                profile={{ name: newName || '?', icon: newIcon, color: newColor, emoji: undefined }}
+                size={72}
+              />
+              <input
+                value={newName}
+                onChange={e => setNewName(e.target.value)}
+                placeholder="Name (e.g. Alice)"
+                autoFocus
+                onKeyDown={e => {
+                  if (e.key === 'Enter') handleAdd()
+                  if (e.key === 'Escape') setShowAdd(false)
+                }}
+                style={{
+                  flex: 1,
+                  fontSize: 16,
+                  background: 'var(--surface-el)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 10,
+                  padding: '12px 14px',
+                  color: 'var(--text-primary)',
+                  outline: 'none',
+                }}
+              />
             </div>
-            <div style={{ display: 'flex', gap: 8, marginTop: 20 }}>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div>
+                <p className="lt-label" style={{ marginBottom: 8 }}>Color</p>
+                <ColorPicker value={newColor} onChange={setNewColor} />
+              </div>
+              <div>
+                <p className="lt-label" style={{ marginBottom: 8 }}>Icon</p>
+                <IconPicker value={newIcon} onChange={setNewIcon} color={colorHex(newColor)} />
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: 8, marginTop: 22 }}>
               <button
                 className="lt-btn-secondary"
-                onClick={() => { setShowAdd(false); setNewName(''); setNewEmoji('') }}
+                onClick={() => { setShowAdd(false); setNewName('') }}
                 style={{ flex: 1, justifyContent: 'center' }}
               >
                 Cancel

@@ -291,7 +291,7 @@ actor DatabaseService {
 
     func fetchAllProfiles() throws -> [Profile] {
         guard let db = db else { throw DatabaseError.openFailed("Not opened") }
-        let sql = "SELECT id, name, emoji, sort_order, created_at FROM profiles ORDER BY sort_order ASC, created_at ASC;"
+        let sql = "SELECT id, name, emoji, sort_order, created_at, icon, color FROM profiles ORDER BY sort_order ASC, created_at ASC;"
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
             throw DatabaseError.prepareFailed(String(cString: sqlite3_errmsg(db)))
@@ -305,8 +305,11 @@ actor DatabaseService {
             let emoji = columnTextOptional(stmt!, 2)
             let sortOrder = Int(sqlite3_column_int64(stmt!, 3))
             let createdAt = Date(timeIntervalSince1970: sqlite3_column_double(stmt!, 4))
+            let icon = columnTextOptional(stmt!, 5)
+            let color = columnTextOptional(stmt!, 6)
             profiles.append(Profile(
-                id: id, name: name, emoji: emoji, sortOrder: sortOrder, createdAt: createdAt
+                id: id, name: name, emoji: emoji, icon: icon, color: color,
+                sortOrder: sortOrder, createdAt: createdAt
             ))
         }
         return profiles
@@ -314,7 +317,7 @@ actor DatabaseService {
 
     func insertProfile(_ profile: Profile) throws {
         guard let db = db else { throw DatabaseError.openFailed("Not opened") }
-        let sql = "INSERT INTO profiles (id, name, emoji, sort_order, created_at) VALUES (?, ?, ?, ?, ?);"
+        let sql = "INSERT INTO profiles (id, name, emoji, sort_order, created_at, icon, color) VALUES (?, ?, ?, ?, ?, ?, ?);"
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
             throw DatabaseError.prepareFailed(String(cString: sqlite3_errmsg(db)))
@@ -325,6 +328,8 @@ actor DatabaseService {
         bindNullable(stmt: stmt!, index: 3, text: profile.emoji)
         sqlite3_bind_int64(stmt, 4, Int64(profile.sortOrder))
         sqlite3_bind_double(stmt, 5, profile.createdAt.timeIntervalSince1970)
+        bindNullable(stmt: stmt!, index: 6, text: profile.icon)
+        bindNullable(stmt: stmt!, index: 7, text: profile.color)
         guard sqlite3_step(stmt) == SQLITE_DONE else {
             throw DatabaseError.execFailed(String(cString: sqlite3_errmsg(db)))
         }
@@ -332,7 +337,7 @@ actor DatabaseService {
 
     func updateProfile(_ profile: Profile) throws {
         guard let db = db else { throw DatabaseError.openFailed("Not opened") }
-        let sql = "UPDATE profiles SET name=?, emoji=?, sort_order=? WHERE id=?;"
+        let sql = "UPDATE profiles SET name=?, emoji=?, sort_order=?, icon=?, color=? WHERE id=?;"
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
             throw DatabaseError.prepareFailed(String(cString: sqlite3_errmsg(db)))
@@ -341,7 +346,9 @@ actor DatabaseService {
         bind(stmt: stmt!, index: 1, text: profile.name)
         bindNullable(stmt: stmt!, index: 2, text: profile.emoji)
         sqlite3_bind_int64(stmt, 3, Int64(profile.sortOrder))
-        bind(stmt: stmt!, index: 4, text: profile.id.uuidString)
+        bindNullable(stmt: stmt!, index: 4, text: profile.icon)
+        bindNullable(stmt: stmt!, index: 5, text: profile.color)
+        bind(stmt: stmt!, index: 6, text: profile.id.uuidString)
         guard sqlite3_step(stmt) == SQLITE_DONE else {
             throw DatabaseError.execFailed(String(cString: sqlite3_errmsg(db)))
         }

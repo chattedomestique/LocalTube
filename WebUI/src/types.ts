@@ -44,6 +44,10 @@ export interface Profile {
   id: string
   name: string
   emoji?: string
+  /** Phosphor icon name (e.g. "Heart") — see lib/profileIcons.ts */
+  icon?: string
+  /** Color key from lib/profileColors.ts (e.g. "coral") */
+  color?: string
   sortOrder: number
   createdAt: string
 }
@@ -123,8 +127,8 @@ export type BridgeMessage =
   | { type: 'syncChannel';         payload: { channelId: string } }
   | { type: 'uploadChannelBanner'; payload: { channelId: string } }
   | { type: 'setActiveProfile';    payload: { profileId: string | null } }
-  | { type: 'addProfile';          payload: { name: string; emoji?: string; channelIds?: string[] } }
-  | { type: 'updateProfile';       payload: { id: string; name?: string; emoji?: string } }
+  | { type: 'addProfile';          payload: { name: string; emoji?: string; icon?: string; color?: string; channelIds?: string[] } }
+  | { type: 'updateProfile';       payload: { id: string; name?: string; emoji?: string; icon?: string; color?: string } }
   | { type: 'deleteProfile';       payload: { profileId: string } }
   | { type: 'setProfileChannels';  payload: { profileId: string; channelIds: string[] } }
 

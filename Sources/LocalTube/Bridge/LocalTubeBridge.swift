@@ -391,11 +391,15 @@ final class LocalTubeBridge: NSObject, WKScriptMessageHandler {
             return
         }
         let emoji = payload["emoji"] as? String
+        let icon  = payload["icon"]  as? String
+        let color = payload["color"] as? String
         let channelIds: [UUID] = (payload["channelIds"] as? [String])?
             .compactMap(UUID.init(uuidString:)) ?? []
         let profile = Profile(
             name: name,
             emoji: emoji,
+            icon: icon,
+            color: color,
             sortOrder: appState.profiles.count
         )
         appState.addProfile(profile)
@@ -421,6 +425,14 @@ final class LocalTubeBridge: NSObject, WKScriptMessageHandler {
         }
         if let emoji = payload["emoji"] as? String {
             profile.emoji = emoji.isEmpty ? nil : emoji
+        }
+        // Use NSNull / explicit empty string as "clear" semantics from JS:
+        // present-and-empty → nil, present-and-nonempty → set, absent → unchanged.
+        if let icon = payload["icon"] as? String {
+            profile.icon = icon.isEmpty ? nil : icon
+        }
+        if let color = payload["color"] as? String {
+            profile.color = color.isEmpty ? nil : color
         }
         appState.updateProfile(profile)
         emitter.emitProfileUpserted(profile)

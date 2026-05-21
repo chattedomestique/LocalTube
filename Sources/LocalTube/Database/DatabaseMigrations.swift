@@ -26,6 +26,10 @@ enum DatabaseMigrations {
             try migration5AddProfiles(db: db)
             setUserVersion(db: db, version: 5)
         }
+        if currentVersion < 6 {
+            try migration6AddProfileIconColor(db: db)
+            setUserVersion(db: db, version: 6)
+        }
     }
 
     // MARK: - Version Tracking
@@ -150,6 +154,17 @@ enum DatabaseMigrations {
         COMMIT;
         """
         try exec(db: db, sql: sql)
+    }
+
+    // MARK: - Migration 6: Profile icon + color
+    //
+    // Adds Phosphor icon name + soft-palette color key per profile. Both
+    // nullable — legacy profiles (emoji-only) keep rendering via the
+    // ProfileAvatar fallback chain.
+
+    private static func migration6AddProfileIconColor(db: OpaquePointer) throws {
+        try exec(db: db, sql: "ALTER TABLE profiles ADD COLUMN icon TEXT;")
+        try exec(db: db, sql: "ALTER TABLE profiles ADD COLUMN color TEXT;")
     }
 
     // MARK: - Helpers

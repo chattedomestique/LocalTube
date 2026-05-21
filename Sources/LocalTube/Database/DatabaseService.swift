@@ -81,7 +81,7 @@ actor DatabaseService {
 
     func fetchAllChannels() throws -> [Channel] {
         guard let db = db else { throw DatabaseError.openFailed("Not opened") }
-        let sql = "SELECT id, display_name, emoji, type, youtube_channel_id, folder_name, sort_order, created_at, banner_path FROM channels ORDER BY sort_order ASC, created_at ASC;"
+        let sql = "SELECT id, display_name, emoji, type, youtube_channel_id, folder_name, sort_order, created_at, banner_path, last_synced_at, last_sync_error FROM channels ORDER BY sort_order ASC, created_at ASC;"
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
             throw DatabaseError.prepareFailed(String(cString: sqlite3_errmsg(db)))
@@ -456,11 +456,89 @@ actor DatabaseService {
         let sortOrder = Int(sqlite3_column_int64(stmt, 6))
         let createdAt = Date(timeIntervalSince1970: sqlite3_column_double(stmt, 7))
         let bannerPath = columnText(stmt, 8)
+        let lastSyncedAt: Date? = sqlite3_column_type(stmt, 9) != SQLITE_NULL
+            ? Date(timeIntervalSince1970: sqlite3_column_double(stmt, 9))
+            : nil
+        let lastSyncError = columnTextOptional(stmt, 10)
         return Channel(
             id: id, displayName: displayName, emoji: emoji, type: type,
             youtubeChannelId: youtubeChannelId, folderName: folderName,
-            sortOrder: sortOrder, createdAt: createdAt, bannerPath: bannerPath
+            sortOrder: sortOrder, createdAt: createdAt, bannerPath: bannerPath,
+            lastSyncedAt: lastSyncedAt, lastSyncError: lastSyncError
         )
+    }
+
+    // MARK: - Channel sync state
+
+    func updateChannelSyncState(id: UUID, lastSyncedAt: Date?, lastSyncError: String?) throws {
+        guard let db = db else { throw DatabaseError.openFailed("Not opened") }
+        let sql = "UPDATE channels SET last_synced_at=?, last_sync_error=? WHERE id=?;"
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            throw DatabaseError.prepareFailed(String(cString: sqlite3_errmsg(db)))
+        }
+        defer { sqlite3_finalize(stmt) }
+        if let t = lastSyncedAt {
+            sqlite3_bind_double(stmt, 1, t.timeIntervalSince1970)
+        } else {
+            sqlite3_bind_null(stmt, 1)
+        }
+        bindNullable(stmt: stmt!, index: 2, text: lastSyncError)
+        bind(stmt: stmt!, index: 3, text: id.uuidString)
+        guard sqlite3_step(stmt) == SQLITE_DONE else {
+            throw DatabaseError.execFailed(String(cString: sqlite3_errmsg(db)))
+        }
+    }
+
+    // MARK: - Profile favorites
+
+    /// Returns a map of profileId → set of favorited video IDs.
+    func fetchAllProfileFavorites() throws -> [UUID: Set<UUID>] {
+        guard let db = db else { throw DatabaseError.openFailed("Not opened") }
+        let sql = "SELECT profile_id, video_id FROM profile_favorites;"
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            throw DatabaseError.prepareFailed(String(cString: sqlite3_errmsg(db)))
+        }
+        defer { sqlite3_finalize(stmt) }
+        var result: [UUID: Set<UUID>] = [:]
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            guard let pid = UUID(uuidString: columnText(stmt!, 0)),
+                  let vid = UUID(uuidString: columnText(stmt!, 1)) else { continue }
+            result[pid, default: []].insert(vid)
+        }
+        return result
+    }
+
+    func addFavorite(profileId: UUID, videoId: UUID) throws {
+        guard let db = db else { throw DatabaseError.openFailed("Not opened") }
+        let sql = "INSERT OR IGNORE INTO profile_favorites (profile_id, video_id, created_at) VALUES (?, ?, ?);"
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            throw DatabaseError.prepareFailed(String(cString: sqlite3_errmsg(db)))
+        }
+        defer { sqlite3_finalize(stmt) }
+        bind(stmt: stmt!, index: 1, text: profileId.uuidString)
+        bind(stmt: stmt!, index: 2, text: videoId.uuidString)
+        sqlite3_bind_double(stmt, 3, Date().timeIntervalSince1970)
+        guard sqlite3_step(stmt) == SQLITE_DONE else {
+            throw DatabaseError.execFailed(String(cString: sqlite3_errmsg(db)))
+        }
+    }
+
+    func removeFavorite(profileId: UUID, videoId: UUID) throws {
+        guard let db = db else { throw DatabaseError.openFailed("Not opened") }
+        let sql = "DELETE FROM profile_favorites WHERE profile_id=? AND video_id=?;"
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            throw DatabaseError.prepareFailed(String(cString: sqlite3_errmsg(db)))
+        }
+        defer { sqlite3_finalize(stmt) }
+        bind(stmt: stmt!, index: 1, text: profileId.uuidString)
+        bind(stmt: stmt!, index: 2, text: videoId.uuidString)
+        guard sqlite3_step(stmt) == SQLITE_DONE else {
+            throw DatabaseError.execFailed(String(cString: sqlite3_errmsg(db)))
+        }
     }
 
     private func videoFromStatement(_ stmt: OpaquePointer) -> Video {

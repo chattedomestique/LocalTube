@@ -19,6 +19,11 @@ struct Channel: Identifiable, Codable, Hashable, Sendable {
     var sortOrder: Int
     let createdAt: Date
     var bannerPath: String
+    /// Timestamp of the most recent successful sync. nil = never synced.
+    var lastSyncedAt: Date?
+    /// Last sync's error message, if any. nil = last sync succeeded (or never ran).
+    /// Cleared on the next successful sync.
+    var lastSyncError: String?
 
     // MARK: - Computed
 
@@ -57,7 +62,9 @@ struct Channel: Identifiable, Codable, Hashable, Sendable {
         folderName: String,
         sortOrder: Int = 0,
         createdAt: Date = Date(),
-        bannerPath: String = ""
+        bannerPath: String = "",
+        lastSyncedAt: Date? = nil,
+        lastSyncError: String? = nil
     ) {
         self.id = id
         self.displayName = displayName
@@ -68,6 +75,8 @@ struct Channel: Identifiable, Codable, Hashable, Sendable {
         self.sortOrder = sortOrder
         self.createdAt = createdAt
         self.bannerPath = bannerPath
+        self.lastSyncedAt = lastSyncedAt
+        self.lastSyncError = lastSyncError
     }
 
     // MARK: - Display

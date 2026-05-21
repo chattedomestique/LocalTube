@@ -136,6 +136,14 @@ final class BridgeEventEmitter {
             "activeProfileId": activeProfileId?.uuidString as Any,
         ])
     }
+
+    func emitFavoriteChanged(profileId: UUID, videoId: UUID, isFavorite: Bool) {
+        emit("favoriteChanged", payload: [
+            "profileId":  profileId.uuidString,
+            "videoId":    videoId.uuidString,
+            "isFavorite": isFavorite,
+        ])
+    }
 }
 
 // MARK: - Shared Formatter
@@ -191,6 +199,12 @@ extension AppState {
         payload["profileChannels"] = pcMap
         payload["activeProfileId"] = activeProfileId?.uuidString as Any
 
+        var favMap: [String: [String]] = [:]
+        for (pid, vids) in profileFavorites {
+            favMap[pid.uuidString] = vids.map { $0.uuidString }
+        }
+        payload["profileFavorites"] = favMap
+
         return payload
     }
 }
@@ -223,6 +237,8 @@ extension Channel {
         ]
         if let emoji = emoji              { p["emoji"]            = emoji }
         if let ytId  = youtubeChannelId   { p["youtubeChannelId"] = ytId  }
+        if let t = lastSyncedAt           { p["lastSyncedAt"]     = sharedISO8601Formatter.string(from: t) }
+        if let err = lastSyncError        { p["lastSyncError"]    = err }
         return p
     }
 }

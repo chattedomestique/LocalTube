@@ -32,6 +32,10 @@ export interface Channel {
   sortOrder: number
   createdAt: string
   bannerPath?: string
+  /** ISO timestamp of last successful sync. Undefined = never synced. */
+  lastSyncedAt?: string
+  /** Last sync's error message, if it failed. Cleared on next success. */
+  lastSyncError?: string
 }
 
 export interface AppSettings {
@@ -78,6 +82,8 @@ export interface AppState {
   profiles: Profile[]
   /** profileId → list of channel ids assigned to that profile */
   profileChannels: Record<string, string[]>
+  /** profileId → list of favorited video ids. Per-profile per-video. */
+  profileFavorites: Record<string, string[]>
   activeProfileId?: string
 }
 
@@ -105,6 +111,7 @@ export type BridgeEvent =
   | { type: 'profileRemoved';    payload: { profileId: string } }
   | { type: 'profileChannelsUpdated'; payload: { profileId: string; channelIds: string[] } }
   | { type: 'activeProfileChanged';   payload: { activeProfileId: string | null } }
+  | { type: 'favoriteChanged';        payload: { profileId: string; videoId: string; isFavorite: boolean } }
 
 // ─── Bridge Messages (JS → Swift) ─────────────────────────────────────────
 export type BridgeMessage =
@@ -132,6 +139,7 @@ export type BridgeMessage =
   | { type: 'deleteProfile';       payload: { profileId: string } }
   | { type: 'setProfileChannels';  payload: { profileId: string; channelIds: string[] } }
   | { type: 'dismissPINEntry' }
+  | { type: 'toggleFavorite';      payload: { profileId: string; videoId: string; isFavorite: boolean } }
 
 // ─── Navigation ────────────────────────────────────────────────────────────
 export type NavScreen = 'library' | 'channel' | 'settings' | 'editor' | 'profiles'

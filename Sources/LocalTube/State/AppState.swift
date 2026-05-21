@@ -145,6 +145,15 @@ final class AppState {
         library.setProfileChannels(profileId: profileId, channelIds: channelIds)
     }
 
+    // Favorites forwarders
+    var profileFavorites: [UUID: Set<UUID>] {
+        get { library.profileFavorites }
+        set { library.profileFavorites = newValue }
+    }
+    func setFavorite(profileId: UUID, videoId: UUID, isFavorite: Bool) {
+        library.setFavorite(profileId: profileId, videoId: videoId, isFavorite: isFavorite)
+    }
+
     func addChannel(_ channel: Channel)         { library.addChannel(channel) }
     func removeChannel(id: UUID, registerRedo: Bool = false) {
         library.removeChannel(id: id, registerRedo: registerRedo)
@@ -218,6 +227,8 @@ final class AppState {
 
     /// Fetches the latest video list for a YouTube source channel and adds any
     /// new videos to the library. Also fetches the channel banner on first sync.
+    /// Errors are caught and stored on Channel.lastSyncError so the UI can
+    /// surface them — they no longer silently disappear into the log.
     func syncChannel(_ channel: Channel) async {
         guard let ytId = channel.youtubeChannelId, !ytId.isEmpty else { return }
 
@@ -229,8 +240,38 @@ final class AppState {
             NotificationCenter.default.post(name: .channelSyncStateChanged, object: nil)
         }
 
-        // Fetch video list from YouTube
-        let entries = await ChannelSyncService.fetchVideoList(youtubeChannelId: ytId)
+        // Fetch video list from YouTube — store the failure reason on the
+        // channel so the UI shows a banner instead of silently doing nothing.
+        let entries: [ChannelSyncEntry]
+        do {
+            entries = try await ChannelSyncService.fetchVideoList(youtubeChannelId: ytId)
+        } catch {
+            let msg = error.localizedDescription
+            AppLogger.error("ChannelSyncService: \(msg)")
+            if var ch = channels.first(where: { $0.id == channel.id }) {
+                ch.lastSyncError = msg
+                updateChannel(ch)
+                await persist("syncChannel error") {
+                    try await DatabaseService.shared.updateChannelSyncState(
+                        id: ch.id, lastSyncedAt: ch.lastSyncedAt, lastSyncError: msg
+                    )
+                }
+            }
+            return
+        }
+
+        // Success — clear any prior error and stamp lastSyncedAt.
+        if var ch = channels.first(where: { $0.id == channel.id }) {
+            let now = Date()
+            ch.lastSyncedAt = now
+            ch.lastSyncError = nil
+            updateChannel(ch)
+            await persist("syncChannel success") {
+                try await DatabaseService.shared.updateChannelSyncState(
+                    id: ch.id, lastSyncedAt: now, lastSyncError: nil
+                )
+            }
+        }
         let existing = videosForChannel(channel.id).map { $0.youtubeVideoId }
         let existingSet = Set(existing)
 

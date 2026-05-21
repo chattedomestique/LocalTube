@@ -30,6 +30,10 @@ enum DatabaseMigrations {
             try migration6AddProfileIconColor(db: db)
             setUserVersion(db: db, version: 6)
         }
+        if currentVersion < 7 {
+            try migration7SyncStateAndFavorites(db: db)
+            setUserVersion(db: db, version: 7)
+        }
     }
 
     // MARK: - Version Tracking
@@ -165,6 +169,39 @@ enum DatabaseMigrations {
     private static func migration6AddProfileIconColor(db: OpaquePointer) throws {
         try exec(db: db, sql: "ALTER TABLE profiles ADD COLUMN icon TEXT;")
         try exec(db: db, sql: "ALTER TABLE profiles ADD COLUMN color TEXT;")
+    }
+
+    // MARK: - Migration 7: Channel sync state + per-profile favorites
+    //
+    // - Channels get last_synced_at + last_sync_error so the UI can show
+    //   "Last synced 2 min ago" or surface the failure reason. Previously
+    //   ChannelSyncService swallowed errors into the log; now we keep
+    //   them on the channel record itself.
+    // - profile_favorites: M:N junction. Per-profile per-video. Two
+    //   profiles assigned the same channel maintain independent favorite
+    //   lists. ON DELETE CASCADE on both FKs keeps it self-cleaning.
+
+    private static func migration7SyncStateAndFavorites(db: OpaquePointer) throws {
+        try exec(db: db, sql: "ALTER TABLE channels ADD COLUMN last_synced_at REAL;")
+        try exec(db: db, sql: "ALTER TABLE channels ADD COLUMN last_sync_error TEXT;")
+
+        let sql = """
+        BEGIN TRANSACTION;
+
+        CREATE TABLE IF NOT EXISTS profile_favorites (
+            profile_id TEXT NOT NULL,
+            video_id TEXT NOT NULL,
+            created_at REAL NOT NULL,
+            PRIMARY KEY (profile_id, video_id),
+            FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE,
+            FOREIGN KEY (video_id) REFERENCES videos(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_profile_favorites_profile ON profile_favorites(profile_id);
+
+        COMMIT;
+        """
+        try exec(db: db, sql: sql)
     }
 
     // MARK: - Helpers

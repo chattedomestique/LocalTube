@@ -14,10 +14,10 @@ struct ChannelSyncEntry: Sendable {
 
 enum ChannelSyncService {
 
-    /// Fetches the video list for a YouTube channel.
-    /// Returns an array of ChannelSyncEntry sorted oldest-first (yt-dlp default),
-    /// or an empty array on any failure.
-    static func fetchVideoList(youtubeChannelId: String) async -> [ChannelSyncEntry] {
+    /// Fetches the video list for a YouTube channel. Throws on any failure
+    /// (yt-dlp not found, network error, parse failure) — callers capture
+    /// the error message into Channel.lastSyncError so the UI can show it.
+    static func fetchVideoList(youtubeChannelId: String) async throws -> [ChannelSyncEntry] {
         let ytDlp = await ChannelResolverService.findYtDlp()
 
         let channelURL = makeChannelURL(youtubeChannelId)
@@ -26,18 +26,12 @@ enum ChannelSyncService {
         // --flat-playlist: metadata only, no actual video downloads.
         // --print: one tab-separated line per entry.
         // Duration may be "NA" for live/premiere items — we skip those.
-        let output: String
-        do {
-            output = try await ShellRunner.run(ytDlp, args: [
-                "--flat-playlist",
-                "--print", "%(id)s\t%(title)s\t%(duration)s",
-                "--no-warnings",
-                channelURL,
-            ], timeout: 180)
-        } catch {
-            AppLogger.error("ChannelSyncService: yt-dlp failed — \(error.localizedDescription)")
-            return []
-        }
+        let output = try await ShellRunner.run(ytDlp, args: [
+            "--flat-playlist",
+            "--print", "%(id)s\t%(title)s\t%(duration)s",
+            "--no-warnings",
+            channelURL,
+        ], timeout: 180)
 
         guard !output.isEmpty else { return [] }
 

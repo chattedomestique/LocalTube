@@ -60,9 +60,12 @@ interface Props {
   video: Video
   isEditorMode: boolean
   isActiveDownload?: boolean
+  /** undefined = no profile context (no heart shown). */
+  isFavorite?: boolean
   onPlay: () => void
   onDelete?: () => void
   onRetry?: () => void
+  onToggleFavorite?: () => void
 }
 
 function formatDuration(seconds: number): string {
@@ -81,9 +84,11 @@ function VideoCard({
   video,
   isEditorMode,
   isActiveDownload,
+  isFavorite,
   onPlay,
   onDelete,
   onRetry,
+  onToggleFavorite,
 }: Props) {
   const isReady = video.downloadState === 'ready'
   const isDownloading = video.downloadState === 'downloading' || isActiveDownload
@@ -204,33 +209,55 @@ function VideoCard({
           </div>
         )}
 
-        {/* Error overlay */}
+        {/* Error overlay — now surfaces the actual error text so parents
+            can debug why a download failed (was just a generic icon). */}
         {isError && (
           <div style={{
             position: 'absolute',
             inset: 0,
-            background: 'rgba(0,0,0,0.7)',
+            background: 'rgba(0,0,0,0.78)',
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: 8,
+            gap: 10,
+            padding: 14,
           }}>
             <div style={{
-              width: 52,
-              height: 52,
+              width: 44,
+              height: 44,
               borderRadius: '50%',
               background: 'rgba(248,113,113,0.2)',
               border: '1px solid rgba(248,113,113,0.4)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
+              flexShrink: 0,
             }}>
-              <svg width="24" height="24" viewBox="0 0 16 16" fill="none">
+              <svg width="22" height="22" viewBox="0 0 16 16" fill="none">
                 <path d="M8 4V8" stroke="#f87171" strokeWidth="1.5" strokeLinecap="round" />
                 <circle cx="8" cy="11" r="0.75" fill="#f87171" />
               </svg>
             </div>
+            {video.downloadError && (
+              <div
+                title={video.downloadError}
+                style={{
+                  fontSize: 11,
+                  color: '#fca5a5',
+                  textAlign: 'center',
+                  lineHeight: 1.4,
+                  display: '-webkit-box',
+                  WebkitLineClamp: 3,
+                  WebkitBoxOrient: 'vertical',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  maxWidth: '100%',
+                }}
+              >
+                {video.downloadError}
+              </div>
+            )}
             {onRetry && (
               <button
                 className="lt-btn-retry"
@@ -240,6 +267,50 @@ function VideoCard({
               </button>
             )}
           </div>
+        )}
+
+        {/* Favorite heart — top-left, only when a profile context is
+            present (i.e. activeProfileId set). Doesn't show in editor
+            mode (no profile selected). Click toggles for the active
+            profile; two profiles maintain independent favorites. */}
+        {isFavorite !== undefined && isReady && (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onToggleFavorite?.() }}
+            aria-label={isFavorite ? 'Unfavorite' : 'Favorite'}
+            title={isFavorite ? 'Unfavorite' : 'Favorite'}
+            style={{
+              position: 'absolute',
+              top: 8,
+              left: 8,
+              width: 34,
+              height: 34,
+              borderRadius: '50%',
+              background: isFavorite ? 'rgba(248,113,113,0.92)' : 'rgba(0,0,0,0.55)',
+              border: `1px solid ${isFavorite ? 'rgba(255,255,255,0.4)' : 'rgba(255,255,255,0.18)'}`,
+              backdropFilter: 'blur(10px)',
+              WebkitBackdropFilter: 'blur(10px)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              padding: 0,
+              transition: 'background 180ms ease, transform 180ms cubic-bezier(0.25,1,0.5,1), border-color 180ms ease',
+              zIndex: 2,
+            }}
+            onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.10)' }}
+            onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)' }}
+          >
+            <svg width="17" height="17" viewBox="0 0 17 17" fill="none">
+              <path
+                d="M8.5 14.5S2 11 2 6.5C2 4.6 3.6 3 5.5 3c1.3 0 2.4.7 3 1.7C9.1 3.7 10.2 3 11.5 3 13.4 3 15 4.6 15 6.5c0 4.5-6.5 8-6.5 8z"
+                fill={isFavorite ? 'white' : 'none'}
+                stroke={isFavorite ? 'white' : 'rgba(255,255,255,0.92)'}
+                strokeWidth="1.6"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </button>
         )}
 
         {/* Hover play button — CSS-driven visibility via .lt-play-btn */}
@@ -386,5 +457,6 @@ function VideoCard({
 export default memo(VideoCard, (prev, next) =>
   prev.video === next.video &&
   prev.isEditorMode === next.isEditorMode &&
-  prev.isActiveDownload === next.isActiveDownload
+  prev.isActiveDownload === next.isActiveDownload &&
+  prev.isFavorite === next.isFavorite
 )

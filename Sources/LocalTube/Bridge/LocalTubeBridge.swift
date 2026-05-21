@@ -66,7 +66,19 @@ final class LocalTubeBridge: NSObject, WKScriptMessageHandler {
         case .deleteProfile:       handleDeleteProfile(payloadDict)
         case .setProfileChannels:  handleSetProfileChannels(payloadDict)
         case .dismissPINEntry:     handleDismissPINEntry()
+        case .toggleFavorite:      handleToggleFavorite(payloadDict)
         }
+    }
+
+    private func handleToggleFavorite(_ payload: [String: Any]) {
+        guard let appState,
+              let pidStr = payload["profileId"] as? String,
+              let pid = UUID(uuidString: pidStr),
+              let vidStr = payload["videoId"] as? String,
+              let vid = UUID(uuidString: vidStr),
+              let isFavorite = payload["isFavorite"] as? Bool else { return }
+        appState.setFavorite(profileId: pid, videoId: vid, isFavorite: isFavorite)
+        emitter.emitFavoriteChanged(profileId: pid, videoId: vid, isFavorite: isFavorite)
     }
 
     // MARK: - PIN entry dismissal

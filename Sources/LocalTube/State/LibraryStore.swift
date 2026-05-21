@@ -22,6 +22,9 @@ final class LibraryStore {
     // viewer mode. Empty `profiles` falls back to "all channels visible."
     var profiles: [Profile] = []
     var profileChannels: [UUID: Set<UUID>] = [:]  // profileId → channelIds
+    /// Per-profile favorited video IDs. Two profiles assigned the same
+    /// channel maintain independent favorite lists.
+    var profileFavorites: [UUID: Set<UUID>] = [:]  // profileId → videoIds
     var activeProfileId: UUID? {
         didSet {
             if let id = activeProfileId {
@@ -68,9 +71,10 @@ final class LibraryStore {
                 vids = await healInterruptedDownloads(vids)
                 videos[channel.id] = vids
             }
-            // Profiles + assignments
+            // Profiles + assignments + favorites
             profiles = try await DatabaseService.shared.fetchAllProfiles()
             profileChannels = try await DatabaseService.shared.fetchAllProfileChannels()
+            profileFavorites = try await DatabaseService.shared.fetchAllProfileFavorites()
             // Restore the persisted active profile if it still exists. If the
             // stored id refers to a deleted profile, fall back to nil so the
             // user picks again.
@@ -140,6 +144,23 @@ final class LibraryStore {
             return channels
         }
         return channels.filter { assigned.contains($0.id) }
+    }
+
+    // MARK: - Favorites
+
+    func setFavorite(profileId: UUID, videoId: UUID, isFavorite: Bool) {
+        var current = profileFavorites[profileId] ?? []
+        if isFavorite { current.insert(videoId) } else { current.remove(videoId) }
+        profileFavorites[profileId] = current
+        Task {
+            await persist("setFavorite") {
+                if isFavorite {
+                    try await DatabaseService.shared.addFavorite(profileId: profileId, videoId: videoId)
+                } else {
+                    try await DatabaseService.shared.removeFavorite(profileId: profileId, videoId: videoId)
+                }
+            }
+        }
     }
 
     private func healInterruptedDownloads(_ vids: [Video]) async -> [Video] {

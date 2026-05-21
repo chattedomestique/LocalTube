@@ -1,5 +1,6 @@
 import { Component, useEffect, type ReactNode, type ErrorInfo } from 'react'
 import { AppStoreProvider, useAppStore } from './store'
+import { useThumbnailPreloader } from './lib/useThumbnailPreloader'
 import Onboarding from './screens/Onboarding'
 import PINSetup from './screens/PINSetup'
 import PINEntry from './screens/PINEntry'
@@ -99,6 +100,11 @@ const EDITOR_TAB_SCREENS = new Set(['editor', 'profiles', 'settings'])
 function AppContent() {
   const { state, nav, navigateTo } = useAppStore()
   const { isOnboarding, needsPINSetup, showPINEntry, appMode, profiles, activeProfileId } = state
+
+  // Eagerly decode every thumbnail in the catalog at the app root, once
+  // per video. By the time any card mounts its image is already cached +
+  // decoded — kills the scroll-time pop-in.
+  useThumbnailPreloader(state.videos)
 
   // ── Mode-driven auto-navigation ────────────────────────────────────────
   // Entering editor mode always lands you on the Editor shell (Channels

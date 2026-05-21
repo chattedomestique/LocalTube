@@ -31,6 +31,7 @@ const defaultState: AppState = {
   syncingChannelIds: [],
   profiles: [],
   profileChannels: {},
+  profileFavorites: {},
   activeProfileId: undefined,
 }
 
@@ -258,6 +259,19 @@ function applyBridgeEvent(app: AppState, event: BridgeEvent): AppState {
       return {
         ...app,
         activeProfileId: event.payload.activeProfileId ?? undefined,
+      }
+    }
+    case 'favoriteChanged': {
+      const { profileId, videoId, isFavorite } = event.payload
+      const current = new Set(app.profileFavorites[profileId] ?? [])
+      if (isFavorite) current.add(videoId)
+      else current.delete(videoId)
+      return {
+        ...app,
+        profileFavorites: {
+          ...app.profileFavorites,
+          [profileId]: Array.from(current),
+        },
       }
     }
     // folderSelected and pinValidated are handled via callbacks, not state

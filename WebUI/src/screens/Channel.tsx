@@ -20,8 +20,9 @@ const MAX_BG_LAYERS = 5
 
 export default function Channel() {
   const { state, nav, navigateTo, send } = useAppStore()
-  const { channels, videos, appMode, activeDownload } = state
+  const { channels, videos, appMode, activeDownload, activeProfileId, profileFavorites } = state
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
+  const [favoritesOnly, setFavoritesOnly] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [showAddVideos, setShowAddVideos] = useState(false)
   const [urlInput, setUrlInput] = useState('')
@@ -181,11 +182,20 @@ export default function Channel() {
     [sortedVideos]
   )
 
+  const favoriteIds = useMemo(
+    () => new Set(activeProfileId ? (profileFavorites[activeProfileId] ?? []) : []),
+    [activeProfileId, profileFavorites]
+  )
+
   const filteredVideos = useMemo(() => {
+    let list = sortedVideos
+    if (favoritesOnly && activeProfileId) {
+      list = list.filter(v => favoriteIds.has(v.id))
+    }
     const q = searchQuery.trim().toLowerCase()
-    if (!q) return sortedVideos
-    return sortedVideos.filter(v => v.title.toLowerCase().includes(q))
-  }, [sortedVideos, searchQuery])
+    if (q) list = list.filter(v => v.title.toLowerCase().includes(q))
+    return list
+  }, [sortedVideos, searchQuery, favoritesOnly, activeProfileId, favoriteIds])
 
   const totalPages = Math.ceil(filteredVideos.length / pageSize)
   const pagedVideos = useMemo(
@@ -465,20 +475,27 @@ export default function Channel() {
             </div>
           )}
 
-          {/* Sync button — source channels only, editor mode */}
+          {/* Sync button — source channels in editor mode. Always
+              visible (not just !isSyncing) so the user can see the
+              current sync state and force a retry. Disabled while
+              actively syncing; otherwise click to refresh. */}
           {isEditor && channel?.type === 'source' && !isSyncing && (
             <button
-              className="lt-btn-secondary"
+              className={channel.lastSyncError ? "lt-btn-destructive" : "lt-btn-secondary"}
               onClick={() => send({ type: 'syncChannel', payload: { channelId: channel.id } })}
               style={{ padding: '6px 12px', fontSize: 16 }}
-              title="Fetch latest videos from YouTube"
+              title={channel.lastSyncError
+                ? `Sync failed: ${channel.lastSyncError}`
+                : channel.lastSyncedAt
+                  ? `Last synced ${new Date(channel.lastSyncedAt).toLocaleString()}`
+                  : 'Fetch latest videos from YouTube'}
             >
               <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
                 <path d="M1.5 6.5A5 5 0 0 1 11 3.5M11.5 6.5A5 5 0 0 1 2 9.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
                 <path d="M9 1.5L11 3.5L9 5.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                 <path d="M4 7.5L2 9.5L4 11.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
-              Sync
+              {channel.lastSyncError ? 'Retry Sync' : 'Sync'}
             </button>
           )}
 
@@ -597,6 +614,43 @@ export default function Channel() {
         </div>
       </div>
 
+      {/* Sync error banner — visible when the last sync attempt failed.
+          Shows the actual error message so the parent can debug. */}
+      {channel.lastSyncError && (
+        <div style={{
+          padding: '12px 44px',
+          background: 'rgba(248,113,113,0.10)',
+          borderBottom: '1px solid rgba(248,113,113,0.30)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          flexShrink: 0,
+        }}>
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none" style={{ flexShrink: 0 }}>
+            <circle cx="9" cy="9" r="7.5" fill="none" stroke="#f87171" strokeWidth="1.6" />
+            <path d="M9 5V10" stroke="#f87171" strokeWidth="1.6" strokeLinecap="round" />
+            <circle cx="9" cy="12.5" r="0.9" fill="#f87171" />
+          </svg>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: '#fca5a5', marginBottom: 2 }}>
+              Sync failed
+            </div>
+            <div style={{
+              fontSize: 12,
+              color: 'rgba(252,165,165,0.85)',
+              fontFamily: 'ui-monospace, monospace',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}
+            title={channel.lastSyncError}
+            >
+              {channel.lastSyncError}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Sticky search bar — latches under the top bar (top: 80) once it
           has scrolled into position. */}
       {sortedVideos.length > 0 && (
@@ -663,6 +717,24 @@ export default function Channel() {
             <p style={{ margin: '6px 0 0', fontSize: 13, color: 'var(--text-tertiary)' }}>
               {filteredVideos.length} result{filteredVideos.length !== 1 ? 's' : ''} for "{searchQuery}"
             </p>
+          )}
+          {/* Favorites filter pill — only shown when a profile is
+              active (favorites are per-profile). Acts as a toggle:
+              All / Favorites. */}
+          {activeProfileId && (
+            <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+              <FavoritesFilterPill
+                active={!favoritesOnly}
+                label={`All (${sortedVideos.length})`}
+                onClick={() => setFavoritesOnly(false)}
+              />
+              <FavoritesFilterPill
+                active={favoritesOnly}
+                label={`Favorites (${sortedVideos.filter(v => favoriteIds.has(v.id)).length})`}
+                onClick={() => setFavoritesOnly(true)}
+                accent
+              />
+            </div>
           )}
         </div>
       )}
@@ -772,18 +844,34 @@ export default function Channel() {
               gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
               gap: 22,
             }}>
-              {pagedVideos.map(video => (
-                <div key={video.id} data-video-id={video.id} className="reveal">
-                  <VideoCard
-                    video={video}
-                    isEditorMode={isEditor}
-                    isActiveDownload={activeDownload?.videoId === video.id}
-                    onPlay={() => send({ type: 'playVideo', payload: { videoId: video.id } })}
-                    onDelete={isEditor ? () => handleDeleteVideo(video.id) : undefined}
-                    onRetry={() => handleRetry(video.id)}
-                  />
-                </div>
-              ))}
+              {pagedVideos.map(video => {
+                const isFav = activeProfileId ? favoriteIds.has(video.id) : undefined
+                return (
+                  <div key={video.id} data-video-id={video.id} className="reveal">
+                    <VideoCard
+                      video={video}
+                      isEditorMode={isEditor}
+                      isActiveDownload={activeDownload?.videoId === video.id}
+                      isFavorite={isFav}
+                      onPlay={() => send({ type: 'playVideo', payload: { videoId: video.id } })}
+                      onDelete={isEditor ? () => handleDeleteVideo(video.id) : undefined}
+                      onRetry={() => handleRetry(video.id)}
+                      onToggleFavorite={
+                        activeProfileId
+                          ? () => send({
+                              type: 'toggleFavorite',
+                              payload: {
+                                profileId: activeProfileId,
+                                videoId: video.id,
+                                isFavorite: !isFav,
+                              },
+                            })
+                          : undefined
+                      }
+                    />
+                  </div>
+                )
+              })}
             </div>
 
             {/* Pagination */}
@@ -1174,6 +1262,62 @@ function VideoListRow({
         )}
       </div>
     </div>
+  )
+}
+
+// ─── Favorites filter pill ────────────────────────────────────────────────────
+function FavoritesFilterPill({
+  active,
+  label,
+  accent,
+  onClick,
+}: {
+  active: boolean
+  label: string
+  accent?: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 5,
+        height: 28,
+        padding: '0 12px',
+        borderRadius: 99,
+        background: active
+          ? (accent ? 'rgba(248,113,113,0.18)' : 'var(--accent-dim)')
+          : 'rgba(255,255,255,0.04)',
+        border: `1px solid ${
+          active
+            ? (accent ? 'rgba(248,113,113,0.45)' : 'rgba(155,93,229,0.32)')
+            : 'rgba(255,255,255,0.10)'
+        }`,
+        color: active
+          ? (accent ? '#fca5a5' : 'var(--accent)')
+          : 'var(--text-secondary)',
+        fontSize: 12,
+        fontWeight: 600,
+        cursor: 'pointer',
+        outline: 'none',
+        transition: 'background 160ms ease, border-color 160ms ease, color 160ms ease',
+      }}
+    >
+      {accent && (
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+          <path d="M5 8.5S1 6.3 1 3.8C1 2.6 1.9 1.7 3 1.7c.7 0 1.3.4 1.7 1 .4-.6 1-1 1.7-1 1.1 0 2 .9 2 2.1 0 2.5-4 4.7-4 4.7z"
+            fill={active ? '#fca5a5' : 'none'}
+            stroke="currentColor"
+            strokeWidth="1.2"
+            strokeLinejoin="round"
+          />
+        </svg>
+      )}
+      {label}
+    </button>
   )
 }
 

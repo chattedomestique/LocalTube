@@ -213,14 +213,29 @@ export default function Channel() {
   }, [])
 
   // IntersectionObserver: watch all card wrappers, pick the middle visible
-  // one whenever the visible set has stabilised. Re-attached whenever the
-  // visible card list changes (pagination, search).
+  // one and swap the bg AS the user scrolls — not after. We use a
+  // leading-edge rate limit (one swap per fade duration) so back-to-back
+  // intersection events during a fast scroll don't queue up overlapping
+  // crossfades. A tiny trailing-edge settle (80 ms after the last
+  // intersection event) guarantees the bg lands on the true center video
+  // when the user stops scrolling — without the heavy trailing debounce
+  // that previously made the bg only update after motion stopped.
   const visibleIdsRef = useRef<Set<string>>(new Set())
-  const dominantTimerRef = useRef<number | null>(null)
-  const videosByIdRef = useRef<Map<string, Video>>(new Map())
-  useEffect(() => {
-    videosByIdRef.current = new Map(pagedVideos.map(v => [v.id, v]))
-  }, [pagedVideos])
+  const settleTimerRef = useRef<number | null>(null)
+  const lastSwapAtRef = useRef(0)
+
+  // Compute and commit the dominant visible video, respecting the rate limit.
+  // `force` bypasses the rate limit so the trailing settle always fires.
+  const commitDominant = useCallback((force: boolean) => {
+    const now = performance.now()
+    if (!force && now - lastSwapAtRef.current < BG_FADE_MS) return
+    const inOrder = pagedVideos
+      .filter(v => visibleIdsRef.current.has(v.id) && v.thumbnailPath)
+    if (inOrder.length === 0) return
+    const mid = inOrder[Math.floor(inOrder.length / 2)]
+    lastSwapAtRef.current = now
+    swapBg(mid)
+  }, [pagedVideos, swapBg])
 
   useEffect(() => {
     const grid = scrollRef.current?.querySelector('[data-video-grid]')
@@ -235,36 +250,36 @@ export default function Channel() {
         if (entry.isIntersecting) visibleIdsRef.current.add(id)
         else visibleIdsRef.current.delete(id)
       }
-      // Trailing-edge debounce — only fire ~350 ms after the last visibility
-      // change. Fast scrolls produce many entries in quick succession; we
-      // only commit a crossfade once the user settles.
-      if (dominantTimerRef.current !== null) {
-        window.clearTimeout(dominantTimerRef.current)
+      // Leading-edge: swap right now if enough time has passed.
+      commitDominant(false)
+      // Trailing-edge settle: short timer (80 ms) so when scroll stops,
+      // we re-pick the dominant once even if the rate-limit blocked the
+      // last live update. Bypasses the rate limit (force=true).
+      if (settleTimerRef.current !== null) {
+        window.clearTimeout(settleTimerRef.current)
       }
-      dominantTimerRef.current = window.setTimeout(() => {
-        dominantTimerRef.current = null
-        // Preserve grid order — Set insertion order isn't useful here.
-        const inOrder = pagedVideos
-          .filter(v => visibleIdsRef.current.has(v.id) && v.thumbnailPath)
-        if (inOrder.length === 0) return
-        const mid = inOrder[Math.floor(inOrder.length / 2)]
-        swapBg(mid)
-      }, 350)
+      settleTimerRef.current = window.setTimeout(() => {
+        settleTimerRef.current = null
+        commitDominant(true)
+      }, 80)
     }, {
       root: scrollRef.current,
-      threshold: 0.5,
+      // Multiple thresholds = more frequent callbacks as cards drift across
+      // the viewport, so the dominant pick can update during the scroll
+      // rather than only when a card fully crosses the half-visible line.
+      threshold: [0, 0.25, 0.5, 0.75, 1],
     })
 
     cards.forEach(el => observer.observe(el))
     return () => {
       observer.disconnect()
       visibleIdsRef.current.clear()
-      if (dominantTimerRef.current !== null) {
-        window.clearTimeout(dominantTimerRef.current)
-        dominantTimerRef.current = null
+      if (settleTimerRef.current !== null) {
+        window.clearTimeout(settleTimerRef.current)
+        settleTimerRef.current = null
       }
     }
-  }, [pagedVideos, swapBg])
+  }, [pagedVideos, commitDominant])
 
   return (
     <div className="screen-slide-in" onWheel={handleScreenWheel} style={{
@@ -887,13 +902,16 @@ export default function Channel() {
 }
 
 // ─── Ambient blur stack ──────────────────────────────────────────────────────
-// One layer of the two-slot crossfade. Renders the same two stacked blurs the
-// previous single-bg version did, wrapped in an opacity-transitioned div so
-// the *slot* can fade as a unit. transition: opacity ~800ms gives the
-// crossfade an ambient feel rather than a snap. willChange hints the
-// compositor to keep a separate layer so the blur output is cached between
-// swaps. pointer-events stay off so nothing intercepts grid interactions.
-const BG_FADE_MS = 800
+// One layer of the two-slot crossfade. Renders two stacked blurs (primary +
+// screen-blend overlay) wrapped in an opacity-transitioned div so the *slot*
+// can fade as a unit. willChange hints the compositor to keep a separate
+// layer so the blur output is cached between swaps. pointer-events stay off
+// so nothing intercepts grid interactions.
+//
+// 400 ms strikes a balance: short enough that consecutive scroll-driven
+// swaps don't visibly overlap (we rate-limit at this same duration), long
+// enough to feel like a deliberate ambient transition rather than a snap.
+const BG_FADE_MS = 400
 function BgBlurStack({ video, visible }: { video: Video | null; visible: boolean }) {
   if (!video) return null
   return (

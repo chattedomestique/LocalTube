@@ -1,7 +1,8 @@
-import { useState, type CSSProperties, type ReactNode } from 'react'
+import { useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import { useAppStore } from '../store'
 import ChannelCard from '../components/ChannelCard'
 import ProfileAvatar from '../components/ProfileAvatar'
+import AmbientBackground from '../components/AmbientBackground'
 import type { Profile } from '../types'
 
 export default function Library() {
@@ -21,6 +22,25 @@ export default function Library() {
   const sortedChannels = [...visibleChannels].sort((a, b) => a.sortOrder - b.sortOrder)
   const activeProfile = profiles.find(p => p.id === activeProfileId) ?? null
 
+  // Ambient background sources: every visible channel's banner. Each
+  // banner cycles in for ~9s with a soft crossfade — same blur stack as
+  // the channel page. If no banners exist yet we fall back to first
+  // video thumbnails so the bg still has something to chew on.
+  const ambientSources = useMemo(() => {
+    const fromBanners = sortedChannels
+      .map(c => c.bannerPath)
+      .filter((b): b is string => !!b)
+    if (fromBanners.length > 0) return fromBanners
+    // Fallback: first ready thumbnail per channel
+    const fromThumbs: string[] = []
+    for (const c of sortedChannels) {
+      const list = videos[c.id] ?? []
+      const v = list.find(x => x.downloadState === 'ready' && x.thumbnailPath)
+      if (v?.thumbnailPath) fromThumbs.push(v.thumbnailPath)
+    }
+    return fromThumbs
+  }, [sortedChannels, videos])
+
   const handleChannelClick = (channelId: string) => {
     navigateTo({ screen: 'channel', channelId })
   }
@@ -38,10 +58,17 @@ export default function Library() {
       display: 'flex',
       flexDirection: 'column',
       height: '100%',
+      position: 'relative',
+      overflow: 'hidden',
       background: 'var(--bg)',
     }}>
+      {/* Ambient background — cycles through channel banners */}
+      <AmbientBackground sources={ambientSources} />
+
       {/* Top bar */}
       <div style={{
+        position: 'relative',
+        zIndex: 1,
         display: 'flex',
         alignItems: 'center',
         padding: '0 40px',
@@ -136,6 +163,8 @@ export default function Library() {
 
       {/* Content */}
       <div style={{
+        position: 'relative',
+        zIndex: 1,
         flex: 1,
         overflowY: 'auto',
         padding: '44px',
@@ -317,6 +346,9 @@ function TopBarButton({
 }
 
 // ─── Profile chip (viewer mode only) ──────────────────────────────────────────
+// Compact circle — just the avatar, name shown only on hover via title.
+// Profile identity is already established by the picker; in-app the user
+// only needs to *recognise* their profile, not re-read their name.
 function ProfileChip({ profile, onClick }: { profile: Profile; onClick: () => void }) {
   const [hovered, setHovered] = useState(false)
   return (
@@ -325,22 +357,24 @@ function ProfileChip({ profile, onClick }: { profile: Profile; onClick: () => vo
       onClick={onClick}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      title="Switch profile"
+      title={`${profile.name} — switch profile`}
+      aria-label={`Switch profile (currently ${profile.name})`}
       style={{
         display: 'flex',
         alignItems: 'center',
-        gap: 10,
-        padding: '4px 14px 4px 4px',
-        borderRadius: 99,
-        background: hovered ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.04)',
+        justifyContent: 'center',
+        width: 44,
+        height: 44,
+        padding: 0,
+        borderRadius: '50%',
+        background: hovered ? 'rgba(255,255,255,0.10)' : 'transparent',
         border: `1px solid ${hovered ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.10)'}`,
         cursor: 'pointer',
-        color: 'var(--text-primary)',
-        transition: 'background 160ms ease, border-color 160ms ease',
+        transition: 'background 160ms ease, border-color 160ms ease, transform 200ms cubic-bezier(0.25,1,0.5,1)',
+        transform: hovered ? 'scale(1.05)' : 'scale(1)',
       }}
     >
       <ProfileAvatar profile={profile} size={36} />
-      <span style={{ fontSize: 15, fontWeight: 600 }}>{profile.name}</span>
     </button>
   )
 }

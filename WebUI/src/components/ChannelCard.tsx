@@ -1,5 +1,4 @@
 import type { Channel, Video } from '../types'
-import { thumbUrl } from '../utils'
 import { Thumb } from './VideoCard'
 
 interface Props {
@@ -10,19 +9,30 @@ interface Props {
   onClick: () => void
 }
 
-function formatDuration(seconds: number): string {
-  if (seconds <= 0) return ''
-  const h = Math.floor(seconds / 3600)
-  const m = Math.floor((seconds % 3600) / 60)
-  const s = seconds % 60
-  if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
-  return `${m}:${s.toString().padStart(2, '0')}`
-}
+// "New" = a video became ready within the last NEW_VIDEO_WINDOW_MS. Stays
+// up for ~3 days so kids notice fresh content between sessions but it
+// doesn't linger forever on every channel.
+const NEW_VIDEO_WINDOW_MS = 1000 * 60 * 60 * 24 * 3
 
 export default function ChannelCard({ channel, videos, isDownloading, downloadProgress, onClick }: Props) {
   const readyVideos = videos.filter(v => v.downloadState === 'ready')
+
+  // Image priority for the card:
+  //   1. Channel banner (YouTube header art — looks like a channel)
+  //   2. Most recent ready video's thumbnail (fallback for non-source
+  //      channels and channels without a banner yet)
+  //   3. Emoji placeholder
+  const bannerSrc = channel.bannerPath || null
   const thumbVideo = readyVideos[0] ?? videos[0]
-  const hasThumbnail = thumbVideo?.thumbnailPath
+  const hasFallbackThumb = !bannerSrc && thumbVideo?.thumbnailPath
+
+  // Most recent download time across this channel's ready videos.
+  // If that's within NEW_VIDEO_WINDOW_MS, show a soft "new" badge.
+  const lastReadyAt = readyVideos.reduce<number>((acc, v) => {
+    const t = v.downloadedAt ? Date.parse(v.downloadedAt) : 0
+    return t > acc ? t : acc
+  }, 0)
+  const hasNewVideo = lastReadyAt > 0 && (Date.now() - lastReadyAt) < NEW_VIDEO_WINDOW_MS
 
   return (
     <div
@@ -38,8 +48,25 @@ export default function ChannelCard({ channel, videos, isDownloading, downloadPr
         WebkitUserSelect: 'none',
       }}
     >
-      {/* Thumbnail */}
-      {hasThumbnail ? (
+      {/* Card image — prefer YouTube channel banner, fall back to most
+          recent ready video thumbnail, then to an emoji placeholder. */}
+      {bannerSrc ? (
+        <img
+          src={bannerSrc}
+          alt=""
+          className="lt-thumb"
+          loading="eager"
+          decoding="async"
+          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+          style={{
+            position: 'absolute',
+            inset: 0,
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+          }}
+        />
+      ) : hasFallbackThumb ? (
         <Thumb
           video={thumbVideo!}
           className="lt-thumb"
@@ -52,7 +79,6 @@ export default function ChannelCard({ channel, videos, isDownloading, downloadPr
           }}
         />
       ) : (
-        // Placeholder when no thumbnail
         <div style={{
           position: 'absolute',
           inset: 0,
@@ -84,6 +110,46 @@ export default function ChannelCard({ channel, videos, isDownloading, downloadPr
         background: 'transparent',
         pointerEvents: 'none',
       }} className="card-glow-border" />
+
+      {/* "New video" badge — soft glowing dot in the top-left corner
+          when a video became ready in the last few days. Designed to
+          feel ambient (blurred halo) rather than a hard notification
+          dot. Sits above the gradient overlay (zIndex 1). */}
+      {hasNewVideo && (
+        <div
+          title="New video"
+          aria-label="New video"
+          style={{
+            position: 'absolute',
+            top: 14,
+            left: 14,
+            zIndex: 1,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            pointerEvents: 'none',
+          }}
+        >
+          {/* Outer glow */}
+          <div style={{
+            position: 'absolute',
+            width: 28,
+            height: 28,
+            borderRadius: '50%',
+            background: 'rgba(155,93,229,0.55)',
+            filter: 'blur(10px)',
+          }} />
+          {/* Inner dot */}
+          <div style={{
+            position: 'relative',
+            width: 12,
+            height: 12,
+            borderRadius: '50%',
+            background: 'var(--accent)',
+            boxShadow: '0 0 0 2px rgba(13,13,15,0.65), 0 0 12px rgba(155,93,229,0.7)',
+          }} />
+        </div>
+      )}
 
       {/* Top-right: video count badge */}
       <div style={{

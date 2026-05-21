@@ -39,54 +39,27 @@ export default function Channel() {
   // they latch to the viewport top as the banner passes. The browser
   // handles the collapse 100% on the compositor.
   //
-  // For the two scroll-linked visual effects — banner img parallax and
-  // top-bar elevation shadow — we run a *continuous* requestAnimationFrame
-  // loop (mounted while the channel view is open). Each frame we read
-  // scrollTop directly from the DOM and write transform / box-shadow via
-  // refs. This ticks at the display's refresh rate (120 Hz on M-series),
-  // not the JS scroll-event rate (which is much lower and irregular —
-  // that's what made the previous version look "choppy" even while the
-  // container itself scrolled smoothly). We early-out when scrollTop
-  // hasn't changed since the last frame so the loop is essentially free
-  // when the user isn't scrolling.
-  const bannerImgRef = useRef<HTMLImageElement>(null)
-  const topBarRef    = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    let rafId: number | null = null
-    let lastY = -1
-
-    const tick = () => {
-      const scroller = scrollRef.current
-      if (scroller) {
-        const y = scroller.scrollTop
-        if (y !== lastY) {
-          lastY = y
-          const img = bannerImgRef.current
-          if (img) {
-            // 0.5× parallax — img drifts up at half scroll speed.
-            const clamped = Math.min(y, BANNER_HEIGHT)
-            img.style.transform = `translate3d(0, ${clamped * 0.5}px, 0)`
-          }
-          const topBar = topBarRef.current
-          if (topBar) {
-            // Fade the shadow in over the last 100 px before the banner
-            // is fully scrolled past.
-            const shadowStart = BANNER_HEIGHT - 100
-            const t = Math.max(0, Math.min(1, (y - shadowStart) / 100))
-            topBar.style.boxShadow = t > 0
-              ? `0 6px 22px rgba(0,0,0,${0.35 * t})`
-              : 'none'
-          }
-        }
-      }
-      rafId = requestAnimationFrame(tick)
-    }
-    rafId = requestAnimationFrame(tick)
-    return () => {
-      if (rafId !== null) cancelAnimationFrame(rafId)
-    }
-  }, [])
+  // No JS parallax on the banner img. We tried both rAF-driven and
+  // CSS-scroll-driven approaches; both ended up choppy on this WebKit:
+  //   - CSS animation-timeline: scroll(...) isn't shipping yet → it
+  //     played to its end keyframe and stuck there.
+  //   - JS rAF reading scrollTop suffers from a fundamental compositor/
+  //     main-thread split: the native scroll runs on the compositor,
+  //     scrollTop exposed to JS lags by a frame or two. Our img
+  //     transform was always trailing the actual scroll position, so
+  //     even at 120 Hz rAF the img jittered against the silky scroll.
+  // Letting the img scroll 1:1 with its container costs the subtle
+  // sub-second parallax but every frame of the banner exit is rendered
+  // by the compositor — perfectly smooth.
+  //
+  // The top-bar elevation shadow is the only thing left that needs to
+  // change based on scroll position. We drive it from an
+  // IntersectionObserver on the banner (set up further down once
+  // `channel` is in scope): when intersectionRatio < 0.1 (banner is
+  // essentially gone) we toggle a class that CSS-transitions the
+  // box-shadow in. One DOM mutation per crossing, smooth via CSS.
+  const bannerRef = useRef<HTMLDivElement>(null)
+  const topBarRef = useRef<HTMLDivElement>(null)
 
   // Reset to first page whenever the channel changes or search changes
   useEffect(() => { setCurrentPage(0) }, [nav.channelId, searchQuery])
@@ -114,6 +87,31 @@ export default function Channel() {
   const channel = channels.find(c => c.id === nav.channelId)
   const channelVideos = (nav.channelId ? videos[nav.channelId] : []) ?? []
   const isEditor = appMode === 'editor'
+  const bannerPath = channel?.bannerPath ?? ''
+
+  // Top-bar elevation shadow — toggled when the banner is essentially
+  // gone (intersectionRatio < 0.1). When there's no banner at all, keep
+  // the shadow permanently on so the top bar always reads as elevated.
+  useEffect(() => {
+    if (!bannerPath) {
+      topBarRef.current?.classList.add('lt-topbar-elevated')
+      return
+    }
+    topBarRef.current?.classList.remove('lt-topbar-elevated')
+    const banner = bannerRef.current
+    const topBar = topBarRef.current
+    const root = scrollRef.current
+    if (!banner || !topBar || !root) return
+
+    const observer = new IntersectionObserver(([entry]) => {
+      topBar.classList.toggle(
+        'lt-topbar-elevated',
+        entry.intersectionRatio < 0.1
+      )
+    }, { root, threshold: [0, 0.1, 1] })
+    observer.observe(banner)
+    return () => observer.disconnect()
+  }, [bannerPath])
 
   const sortedVideos = useMemo(
     () => [...channelVideos].sort((a, b) => a.sortOrder - b.sortOrder),
@@ -360,18 +358,17 @@ export default function Channel() {
         overflowY: 'auto',
       }}>
 
-      {/* Banner hero — natural scroll content, fixed height.
-          Img has compositor-only parallax via translate3d, set by the
-          scroll handler. */}
+      {/* Banner hero — natural scroll content, fixed height. Img scrolls
+          1:1 with the container (no JS-driven parallax — see comment on
+          the IntersectionObserver effect above for why). */}
       {hasBanner ? (
-        <div style={{
+        <div ref={bannerRef} style={{
           position: 'relative',
           width: '100%',
           height: BANNER_HEIGHT,
           overflow: 'hidden',
         }}>
           <img
-            ref={bannerImgRef}
             src={channel.bannerPath}
             alt=""
             style={{
@@ -381,8 +378,6 @@ export default function Channel() {
               height: BANNER_HEIGHT,
               objectFit: 'cover',
               filter: 'brightness(0.7) saturate(1.1)',
-              transform: 'translate3d(0, 0, 0)',
-              willChange: 'transform',
             }}
             onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
           />
@@ -396,8 +391,9 @@ export default function Channel() {
       ) : null}
 
       {/* Sticky top bar — latches to viewport top as banner scrolls past.
-          Elevation shadow fades in via the rAF loop. */}
-      <div ref={topBarRef} style={{
+          Elevation shadow class is toggled by the IntersectionObserver
+          effect above; CSS transition (see [data-lt-topbar]) fades it. */}
+      <div ref={topBarRef} data-lt-topbar style={{
         position: 'sticky',
         top: 0,
         zIndex: 3,

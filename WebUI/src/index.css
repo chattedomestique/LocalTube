@@ -591,12 +591,18 @@ input, textarea, [contenteditable] {
   contain: layout style paint;
 }
 
-/* Header parallax + elevation shadow are now driven by a continuous     */
-/* requestAnimationFrame loop in Channel.tsx that reads scrollTop on     */
-/* every frame and writes transform / box-shadow via refs. CSS           */
-/* scroll-driven animations (animation-timeline: scroll(...)) would be   */
-/* the ideal home for this but aren't shipping in our WebKit yet —       */
-/* using them produced animations stuck at the end keyframe.             */
+/* Header — elevation shadow on the sticky top bar. Toggled by an        */
+/* IntersectionObserver in Channel.tsx when the banner is essentially    */
+/* gone. CSS transition gives a smooth fade-in. No per-frame work.       */
+.lt-topbar-elevated {
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.35);
+}
+/* Channel top bar always has the transition wired so the class toggle   */
+/* fades in/out smoothly. Selector matches via inline structure rather   */
+/* than a dedicated class so we don't have to add one in JSX.            */
+[data-lt-topbar] {
+  transition: box-shadow 240ms ease;
+}
 
 /* ─── Thumbnail zoom helper ───────────────────────────────────────────────── */
 .lt-thumb {

@@ -11,6 +11,13 @@ const BANNER_HEIGHT = 300
 const COLLAPSE_DISTANCE = 220
 const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3)
 
+// Ambient bg tuning. A long fade plus a tighter rate limit means up to
+// ~4 layers are in flight simultaneously at peak scroll — a continuous
+// blend of recent picks rather than a sequence of discrete crossfades.
+const BG_FADE_MS = 1200
+const BG_SWAP_INTERVAL_MS = 220
+const MAX_BG_LAYERS = 5
+
 export default function Channel() {
   const { state, nav, navigateTo, send } = useAppStore()
   const { channels, videos, appMode, activeDownload } = state
@@ -27,20 +34,59 @@ export default function Channel() {
   const [searchQuery, setSearchQuery] = useState('')
   const scrollRef = useRef<HTMLDivElement>(null)
 
-  // Scroll-driven banner collapse. We track scrollTop on the content scroll
-  // container and derive a 0→1 progress that drives the banner height/opacity
-  // and the top-bar elevation shadow. rAF coalesces fast scroll events into
-  // at most one state update per frame.
-  const [scrollY, setScrollY] = useState(0)
-  const rafRef = useRef<number | null>(null)
+  // Scroll-driven banner collapse — driven via direct DOM mutation, NOT
+  // React state. Using setState here meant every scroll tick was
+  // setState → reconcile → render → DOM patch, so at fast scroll React
+  // dropped frames and the collapse animation visibly snapped to discrete
+  // positions. By writing styles straight to refs inside a rAF callback we
+  // stay on the compositor's fast path and the collapse tracks the scroll
+  // wheel exactly.
+  const bannerRef    = useRef<HTMLDivElement>(null)
+  const bannerImgRef = useRef<HTMLImageElement>(null)
+  const titleRef     = useRef<HTMLHeadingElement>(null)
+  const topBarRef    = useRef<HTMLDivElement>(null)
+  const rafRef       = useRef<number | null>(null)
+  const hasBannerRef = useRef(false)
+
+  // Imperatively apply the visual state for a given scrollTop. Pulled out so
+  // we can call it both from the scroll handler and from the channel/page
+  // reset effects (to snap back to the expanded state on navigation).
+  const applyScrollUI = useCallback((y: number) => {
+    const rawProgress = hasBannerRef.current
+      ? Math.min(1, Math.max(0, y / COLLAPSE_DISTANCE))
+      : 0
+    const progress = easeOutCubic(rawProgress)
+
+    const banner = bannerRef.current
+    if (banner) {
+      banner.style.height  = `${BANNER_HEIGHT * (1 - progress)}px`
+      banner.style.opacity = `${1 - progress}`
+    }
+    const img = bannerImgRef.current
+    if (img) {
+      img.style.transform = `translateY(${-progress * BANNER_HEIGHT * 0.35}px)`
+    }
+    const title = titleRef.current
+    if (title) {
+      title.style.fontSize = `${28 - 6 * progress}px`
+    }
+    const topBar = topBarRef.current
+    if (topBar) {
+      topBar.style.boxShadow = progress > 0
+        ? `0 6px 22px rgba(0,0,0,${0.35 * progress})`
+        : 'none'
+    }
+  }, [])
+
   const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
     const y = e.currentTarget.scrollTop
     if (rafRef.current !== null) return
     rafRef.current = requestAnimationFrame(() => {
       rafRef.current = null
-      setScrollY(y)
+      applyScrollUI(y)
     })
-  }, [])
+  }, [applyScrollUI])
+
   useEffect(() => () => {
     if (rafRef.current !== null) cancelAnimationFrame(rafRef.current)
   }, [])
@@ -48,19 +94,14 @@ export default function Channel() {
   // Reset to first page whenever the channel changes or search changes
   useEffect(() => { setCurrentPage(0) }, [nav.channelId, searchQuery])
 
-  // Scroll content area back to top on every page change
+  // Scroll content area back to top on every page change and on channel
+  // change — without resetting the visual collapse state, a user scrolled
+  // deep in one channel would arrive at the next one with the banner
+  // already gone.
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: 0, behavior: 'instant' })
-    setScrollY(0)
-  }, [currentPage])
-
-  // Resetting scroll position when the channel changes too — otherwise a
-  // user scrolled deep in one channel keeps the banner collapsed when they
-  // navigate to another channel that may have no banner at all.
-  useEffect(() => {
-    scrollRef.current?.scrollTo({ top: 0, behavior: 'instant' })
-    setScrollY(0)
-  }, [nav.channelId])
+    applyScrollUI(0)
+  }, [currentPage, nav.channelId, applyScrollUI])
 
   // Ten-foot UX: wheel/trackpad scrolling should work anywhere on the
   // channel screen, not just when the cursor happens to be over the video
@@ -159,16 +200,16 @@ export default function Channel() {
     [filteredVideos, currentPage, pageSize]
   )
 
-  // Derived collapse progress for the banner + top bar. Eased so the early
-  // scroll feels grippy. Only meaningful when a banner is present.
+  // hasBannerRef mirrors the current channel's banner presence for the
+  // imperative scroll handler. Refs are read inside a rAF callback that
+  // can't see the latest render-cycle closure variables.
   const hasBanner = !!channel.bannerPath
-  const rawProgress = hasBanner ? Math.min(1, Math.max(0, scrollY / COLLAPSE_DISTANCE)) : 0
-  const collapseProgress = easeOutCubic(rawProgress)
-  const bannerHeight = BANNER_HEIGHT * (1 - collapseProgress)
-  const bannerOpacity = 1 - collapseProgress
-  // Subtle channel-name shrink + shadow on the top bar once banner is mostly gone
-  const channelTitleSize = 28 - 6 * collapseProgress
-  const topBarShadowAlpha = 0.35 * collapseProgress
+  useEffect(() => {
+    hasBannerRef.current = hasBanner
+    // Re-run the collapse calc against the *current* scroll so swapping to
+    // a channel without a banner immediately drops collapse to 0, etc.
+    applyScrollUI(scrollRef.current?.scrollTop ?? 0)
+  }, [hasBanner, applyScrollUI])
 
   // Pick a random thumbnail from this channel to use as the *initial* ambient
   // background. The scroll-driven crossfade below takes over once the user
@@ -180,35 +221,36 @@ export default function Channel() {
     return withThumb[Math.floor(Math.random() * withThumb.length)]
   }, [channel.id, sortedVideos.length > 0])
 
-  // ── Ambient background: two-slot crossfade ────────────────────────────────
-  // We keep two background slots (a, b) and toggle which one is rendered at
-  // opacity 1 vs 0. Swapping the *inactive* slot to a new video and then
-  // flipping activeKey gives us a clean opacity crossfade without ever
-  // reloading the currently-visible image — which would force the browser to
-  // re-rasterize the full-screen blur stack mid-fade.
-  //
-  // The dominant visible video is picked via IntersectionObserver (cheap
-  // native API) and only committed after a 350 ms trailing-edge debounce so
-  // a fast scroll past 20 cards triggers one crossfade, not twenty.
-  type BgSlots = { a: Video | null; b: Video | null; active: 'a' | 'b' }
-  const [bgSlots, setBgSlots] = useState<BgSlots>({ a: null, b: null, active: 'a' })
+  // ── Ambient background: rolling N-layer stack ─────────────────────────────
+  // Apple-quality "liquid" backgrounds work because they always show a
+  // *blend* of several recent picks — not a binary A→B transition. We model
+  // that with a rolling stack of up to MAX_BG_LAYERS layers. Each new pick
+  // is appended; the newest is the only one with target opacity 1, all
+  // older layers target opacity 0 with a long fade. The result: at any
+  // moment the visible bg is a continuous blend of recent picks, and
+  // because individual layers each have their own in-flight transition,
+  // there are no discrete "crossfade events" the eye perceives as blinks.
+  type BgLayer = { key: number; video: Video }
+  const [bgLayers, setBgLayers] = useState<BgLayer[]>([])
+  const nextBgKeyRef = useRef(0)
 
-  // Seed the active slot with the initial random pick when entering the channel.
+  // Seed the first layer with the initial random pick when entering the channel.
   useEffect(() => {
-    setBgSlots({ a: initialBgThumb, b: null, active: 'a' })
+    if (initialBgThumb) {
+      setBgLayers([{ key: nextBgKeyRef.current++, video: initialBgThumb }])
+    } else {
+      setBgLayers([])
+    }
   }, [channel.id, initialBgThumb])
 
   const swapBg = useCallback((next: Video) => {
-    setBgSlots(prev => {
-      const current = prev.active === 'a' ? prev.a : prev.b
-      if (current?.id === next.id) return prev
-      // Write the new video into the *inactive* slot, then flip active so
-      // the new slot fades in while the old one fades out. The image that
-      // *was* on screen is left in place until its opacity finishes
-      // transitioning, so no re-rasterization of a visible blur layer.
-      return prev.active === 'a'
-        ? { a: prev.a, b: next, active: 'b' }
-        : { a: next, b: prev.b, active: 'a' }
+    setBgLayers(prev => {
+      const last = prev[prev.length - 1]
+      if (last?.video.id === next.id) return prev
+      const layer: BgLayer = { key: nextBgKeyRef.current++, video: next }
+      // Cap at MAX_BG_LAYERS — the oldest gets sliced once it's been
+      // fading long enough to be effectively invisible.
+      return [...prev, layer].slice(-MAX_BG_LAYERS)
     })
   }, [])
 
@@ -228,7 +270,7 @@ export default function Channel() {
   // `force` bypasses the rate limit so the trailing settle always fires.
   const commitDominant = useCallback((force: boolean) => {
     const now = performance.now()
-    if (!force && now - lastSwapAtRef.current < BG_FADE_MS) return
+    if (!force && now - lastSwapAtRef.current < BG_SWAP_INTERVAL_MS) return
     const inOrder = pagedVideos
       .filter(v => visibleIdsRef.current.has(v.id) && v.thumbnailPath)
     if (inOrder.length === 0) return
@@ -290,11 +332,17 @@ export default function Channel() {
       overflow: 'hidden',
       background: 'var(--bg)',
     }}>
-      {/* ── Ambient background (two-slot crossfade) ───────────────────────── */}
-      {(bgSlots.a || bgSlots.b) && (
+      {/* ── Ambient background (rolling N-layer blend) ────────────────────── */}
+      {bgLayers.length > 0 && (
         <div style={{ position: 'absolute', inset: 0, zIndex: 0, pointerEvents: 'none' }}>
-          <BgBlurStack video={bgSlots.a} visible={bgSlots.active === 'a'} />
-          <BgBlurStack video={bgSlots.b} visible={bgSlots.active === 'b'} />
+          {bgLayers.map((layer, i) => (
+            <BgBlurLayer
+              key={layer.key}
+              video={layer.video}
+              isCurrent={i === bgLayers.length - 1}
+              fadeMs={BG_FADE_MS}
+            />
+          ))}
           {/* Dark scrim — kept outside the crossfade so legibility is constant. */}
           <div style={{
             position: 'absolute',
@@ -313,35 +361,34 @@ export default function Channel() {
         </div>
       )}
 
-      {/* ── Banner hero ────────────────────────────────────────────────────── */}
+      {/* ── Banner hero ─ height/opacity/img-transform driven via ref by the
+          scroll handler. Initial values reflect the expanded state. ─────── */}
       {hasBanner ? (
-        <div style={{
+        <div ref={bannerRef} style={{
           position: 'relative',
           zIndex: 1,
           width: '100%',
-          height: bannerHeight,
-          opacity: bannerOpacity,
+          height: BANNER_HEIGHT,
+          opacity: 1,
           flexShrink: 0,
           overflow: 'hidden',
-          // No CSS transition on height — we drive it per-frame from the
-          // scroll handler so it tracks the scroll velocity exactly. Adding
-          // a transition here would feel laggy.
           willChange: 'height, opacity',
         }}>
           <img
+            ref={bannerImgRef}
             src={channel.bannerPath}
             alt=""
             style={{
               position: 'absolute',
               inset: 0,
               width: '100%',
-              // Use the unscaled banner height so the image doesn't rescale as
-              // the container shrinks — it just clips upward, matching how
-              // YouTube parallaxes the banner away.
+              // Unscaled height so the image clips upward via translateY
+              // (set by the scroll handler) — YouTube-style parallax away.
               height: BANNER_HEIGHT,
               objectFit: 'cover',
               filter: 'brightness(0.7) saturate(1.1)',
-              transform: `translateY(${-collapseProgress * BANNER_HEIGHT * 0.35}px)`,
+              transform: 'translateY(0px)',
+              willChange: 'transform',
             }}
             onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
           />
@@ -355,9 +402,9 @@ export default function Channel() {
       ) : null}
 
       {/* Top bar — sticky-ish: stays put while content scrolls underneath.
-          Gains a subtle drop shadow once the banner has collapsed to give
-          the compact header a sense of elevation over the scrolling list. */}
-      <div style={{
+          boxShadow is driven via ref by the scroll handler (no React state
+          → no re-renders on scroll → no frame drops at speed). */}
+      <div ref={topBarRef} style={{
         position: 'relative',
         zIndex: 2,
         display: 'flex',
@@ -369,10 +416,7 @@ export default function Channel() {
         backdropFilter: 'blur(28px) saturate(200%)',
         WebkitBackdropFilter: 'blur(28px) saturate(200%)',
         borderBottom: '0.5px solid rgba(255,255,255,0.1)',
-        boxShadow: topBarShadowAlpha > 0
-          ? `0 6px 22px rgba(0,0,0,${topBarShadowAlpha})`
-          : 'none',
-        transition: 'box-shadow 180ms ease-out',
+        boxShadow: 'none',
         flexShrink: 0,
         gap: 12,
       }}>
@@ -396,12 +440,11 @@ export default function Channel() {
             <span style={{ fontSize: 20 }}>{channel.emoji}</span>
           )}
           <div>
-            <h1 style={{
-              fontSize: channelTitleSize,
+            <h1 ref={titleRef} style={{
+              fontSize: 28,
               fontWeight: 800,
               letterSpacing: '-0.02em',
-              // No transition — driven per-frame alongside banner collapse so
-              // it tracks scroll velocity.
+              // fontSize is updated via ref by the scroll handler.
             }}>
               {channel.displayName}
             </h1>
@@ -901,25 +944,49 @@ export default function Channel() {
   )
 }
 
-// ─── Ambient blur stack ──────────────────────────────────────────────────────
-// One layer of the two-slot crossfade. Renders two stacked blurs (primary +
-// screen-blend overlay) wrapped in an opacity-transitioned div so the *slot*
-// can fade as a unit. willChange hints the compositor to keep a separate
-// layer so the blur output is cached between swaps. pointer-events stay off
-// so nothing intercepts grid interactions.
+// ─── Ambient blur layer ─────────────────────────────────────────────────────
+// One layer of the rolling-stack background. Mounts at opacity 0 then
+// transitions to its target opacity (1 if it's the newest layer, 0 if it
+// has been overtaken by newer layers). The two-rAF "enter" pattern is
+// important: rendering directly at the target opacity would skip the
+// fade-in entirely. We pre-render at 0, wait for the browser to commit
+// that frame, then flip to target so CSS interpolates between them.
 //
-// 400 ms strikes a balance: short enough that consecutive scroll-driven
-// swaps don't visibly overlap (we rate-limit at this same duration), long
-// enough to feel like a deliberate ambient transition rather than a snap.
-const BG_FADE_MS = 400
-function BgBlurStack({ video, visible }: { video: Video | null; visible: boolean }) {
-  if (!video) return null
+// All layers in the stack are mounted simultaneously with their own
+// in-flight opacity transitions, so the visible bg is always a *blend*
+// rather than the result of a discrete A→B crossfade. That's what makes
+// the motion read as liquid rather than blinky.
+function BgBlurLayer({ video, isCurrent, fadeMs }: {
+  video: Video
+  isCurrent: boolean
+  fadeMs: number
+}) {
+  const [entered, setEntered] = useState(false)
+  useEffect(() => {
+    // Double-rAF so React's commit + browser paint at opacity 0 happens
+    // before we flip to target. A single rAF can be coalesced into the
+    // same paint pass and skip the transition.
+    let id2: number | null = null
+    const id1 = requestAnimationFrame(() => {
+      id2 = requestAnimationFrame(() => setEntered(true))
+    })
+    return () => {
+      cancelAnimationFrame(id1)
+      if (id2 !== null) cancelAnimationFrame(id2)
+    }
+  }, [])
+
+  const opacity = !entered ? 0 : (isCurrent ? 1 : 0)
+
   return (
     <div style={{
       position: 'absolute',
       inset: 0,
-      opacity: visible ? 1 : 0,
-      transition: `opacity ${BG_FADE_MS}ms ease`,
+      opacity,
+      // cubic-bezier(0.4, 0, 0.2, 1) — Material's "standard" curve, slow
+      // entry / fast middle / slow exit. Reads more naturally for ambient
+      // motion than plain ease.
+      transition: `opacity ${fadeMs}ms cubic-bezier(0.4, 0, 0.2, 1)`,
       pointerEvents: 'none',
       willChange: 'opacity',
     }}>

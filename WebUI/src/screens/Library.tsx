@@ -4,9 +4,20 @@ import ChannelCard from '../components/ChannelCard'
 
 export default function Library() {
   const { state, navigateTo, send } = useAppStore()
-  const { channels, videos, appMode, activeDownload } = state
+  const { channels, videos, appMode, activeDownload, profiles, profileChannels, activeProfileId } = state
 
-  const sortedChannels = [...channels].sort((a, b) => a.sortOrder - b.sortOrder)
+  // Editor mode sees every channel; viewer mode filters to the active
+  // profile's assigned channels. If there's no active profile (or no
+  // profiles at all), the viewer also sees every channel — clean fallback
+  // for installs that haven't set profiles up.
+  const visibleChannels = (() => {
+    if (appMode === 'editor') return channels
+    if (!activeProfileId) return channels
+    const assigned = new Set(profileChannels[activeProfileId] ?? [])
+    return channels.filter(c => assigned.has(c.id))
+  })()
+  const sortedChannels = [...visibleChannels].sort((a, b) => a.sortOrder - b.sortOrder)
+  const activeProfile = profiles.find(p => p.id === activeProfileId) ?? null
 
   const handleChannelClick = (channelId: string) => {
     navigateTo({ screen: 'channel', channelId })
@@ -98,6 +109,29 @@ export default function Library() {
           alignItems: 'center',
           gap: 6,
         } as CSSProperties}>
+          {/* Active profile chip — click to switch. Hidden in editor mode. */}
+          {appMode !== 'editor' && activeProfile && (
+            <button
+              className="lt-btn-ghost"
+              onClick={() => send({ type: 'setActiveProfile', payload: { profileId: null } })}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '5px 12px 5px 5px',
+                borderRadius: 99,
+                background: 'rgba(255,255,255,0.06)',
+                border: '0.5px solid rgba(255,255,255,0.13)',
+              }}
+              title="Switch profile"
+            >
+              <span style={{ fontSize: 22, lineHeight: 1 }}>{activeProfile.emoji || '🙂'}</span>
+              <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>
+                {activeProfile.name}
+              </span>
+            </button>
+          )}
+
           {/* Editor mode toggle */}
           <button
             className={`lt-editor-toggle${appMode === 'editor' ? ' active' : ''}`}

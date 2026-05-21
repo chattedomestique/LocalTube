@@ -40,6 +40,14 @@ export interface AppSettings {
   downloadQuality: string
 }
 
+export interface Profile {
+  id: string
+  name: string
+  emoji?: string
+  sortOrder: number
+  createdAt: string
+}
+
 // ─── App Mode ──────────────────────────────────────────────────────────────
 export type AppMode = 'viewer' | 'editor'
 
@@ -63,6 +71,10 @@ export interface AppState {
   }
   editorRemainingSeconds: number
   syncingChannelIds: string[]
+  profiles: Profile[]
+  /** profileId → list of channel ids assigned to that profile */
+  profileChannels: Record<string, string[]>
+  activeProfileId?: string
 }
 
 // ─── Bridge Events (Swift → JS) ────────────────────────────────────────────
@@ -84,6 +96,11 @@ export type BridgeEvent =
   | { type: 'videoRemoved';      payload: { videoId: string } }
   | { type: 'settingsUpdated';   payload: { settings: AppSettings } }
   | { type: 'appModeChanged';    payload: { appMode: AppMode; editorRemainingSeconds: number } }
+  // Profile diff events
+  | { type: 'profileUpserted';   payload: { profile: Profile } }
+  | { type: 'profileRemoved';    payload: { profileId: string } }
+  | { type: 'profileChannelsUpdated'; payload: { profileId: string; channelIds: string[] } }
+  | { type: 'activeProfileChanged';   payload: { activeProfileId: string | null } }
 
 // ─── Bridge Messages (JS → Swift) ─────────────────────────────────────────
 export type BridgeMessage =
@@ -105,9 +122,14 @@ export type BridgeMessage =
   | { type: 'checkDependencies' }
   | { type: 'syncChannel';         payload: { channelId: string } }
   | { type: 'uploadChannelBanner'; payload: { channelId: string } }
+  | { type: 'setActiveProfile';    payload: { profileId: string | null } }
+  | { type: 'addProfile';          payload: { name: string; emoji?: string; channelIds?: string[] } }
+  | { type: 'updateProfile';       payload: { id: string; name?: string; emoji?: string } }
+  | { type: 'deleteProfile';       payload: { profileId: string } }
+  | { type: 'setProfileChannels';  payload: { profileId: string; channelIds: string[] } }
 
 // ─── Navigation ────────────────────────────────────────────────────────────
-export type NavScreen = 'library' | 'channel' | 'settings' | 'editor'
+export type NavScreen = 'library' | 'channel' | 'settings' | 'editor' | 'profiles'
 
 export interface NavState {
   screen: NavScreen

@@ -125,6 +125,26 @@ final class AppState {
     func videosForChannel(_ id: UUID) -> [Video] { library.videosForChannel(id) }
     func firstThumbnail(for ch: Channel) -> String? { library.firstThumbnail(for: ch) }
 
+    // Profile forwarders
+    var profiles: [Profile] {
+        get { library.profiles }
+        set { library.profiles = newValue }
+    }
+    var profileChannels: [UUID: Set<UUID>] {
+        get { library.profileChannels }
+        set { library.profileChannels = newValue }
+    }
+    var activeProfileId: UUID? {
+        get { library.activeProfileId }
+        set { library.activeProfileId = newValue }
+    }
+    func addProfile(_ p: Profile)            { library.addProfile(p) }
+    func updateProfile(_ p: Profile)         { library.updateProfile(p) }
+    func removeProfile(id: UUID)             { library.removeProfile(id: id) }
+    func setProfileChannels(profileId: UUID, channelIds: [UUID]) {
+        library.setProfileChannels(profileId: profileId, channelIds: channelIds)
+    }
+
     func addChannel(_ channel: Channel)         { library.addChannel(channel) }
     func removeChannel(id: UUID, registerRedo: Bool = false) {
         library.removeChannel(id: id, registerRedo: registerRedo)

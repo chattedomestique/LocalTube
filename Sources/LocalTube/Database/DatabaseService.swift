@@ -287,6 +287,140 @@ actor DatabaseService {
         sqlite3_step(stmt)
     }
 
+    // MARK: - Profiles
+
+    func fetchAllProfiles() throws -> [Profile] {
+        guard let db = db else { throw DatabaseError.openFailed("Not opened") }
+        let sql = "SELECT id, name, emoji, sort_order, created_at FROM profiles ORDER BY sort_order ASC, created_at ASC;"
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            throw DatabaseError.prepareFailed(String(cString: sqlite3_errmsg(db)))
+        }
+        defer { sqlite3_finalize(stmt) }
+
+        var profiles: [Profile] = []
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            let id = UUID(uuidString: columnText(stmt!, 0)) ?? UUID()
+            let name = columnText(stmt!, 1)
+            let emoji = columnTextOptional(stmt!, 2)
+            let sortOrder = Int(sqlite3_column_int64(stmt!, 3))
+            let createdAt = Date(timeIntervalSince1970: sqlite3_column_double(stmt!, 4))
+            profiles.append(Profile(
+                id: id, name: name, emoji: emoji, sortOrder: sortOrder, createdAt: createdAt
+            ))
+        }
+        return profiles
+    }
+
+    func insertProfile(_ profile: Profile) throws {
+        guard let db = db else { throw DatabaseError.openFailed("Not opened") }
+        let sql = "INSERT INTO profiles (id, name, emoji, sort_order, created_at) VALUES (?, ?, ?, ?, ?);"
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            throw DatabaseError.prepareFailed(String(cString: sqlite3_errmsg(db)))
+        }
+        defer { sqlite3_finalize(stmt) }
+        bind(stmt: stmt!, index: 1, text: profile.id.uuidString)
+        bind(stmt: stmt!, index: 2, text: profile.name)
+        bindNullable(stmt: stmt!, index: 3, text: profile.emoji)
+        sqlite3_bind_int64(stmt, 4, Int64(profile.sortOrder))
+        sqlite3_bind_double(stmt, 5, profile.createdAt.timeIntervalSince1970)
+        guard sqlite3_step(stmt) == SQLITE_DONE else {
+            throw DatabaseError.execFailed(String(cString: sqlite3_errmsg(db)))
+        }
+    }
+
+    func updateProfile(_ profile: Profile) throws {
+        guard let db = db else { throw DatabaseError.openFailed("Not opened") }
+        let sql = "UPDATE profiles SET name=?, emoji=?, sort_order=? WHERE id=?;"
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            throw DatabaseError.prepareFailed(String(cString: sqlite3_errmsg(db)))
+        }
+        defer { sqlite3_finalize(stmt) }
+        bind(stmt: stmt!, index: 1, text: profile.name)
+        bindNullable(stmt: stmt!, index: 2, text: profile.emoji)
+        sqlite3_bind_int64(stmt, 3, Int64(profile.sortOrder))
+        bind(stmt: stmt!, index: 4, text: profile.id.uuidString)
+        guard sqlite3_step(stmt) == SQLITE_DONE else {
+            throw DatabaseError.execFailed(String(cString: sqlite3_errmsg(db)))
+        }
+    }
+
+    func deleteProfile(id: UUID) throws {
+        guard let db = db else { throw DatabaseError.openFailed("Not opened") }
+        let sql = "DELETE FROM profiles WHERE id=?;"
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            throw DatabaseError.prepareFailed(String(cString: sqlite3_errmsg(db)))
+        }
+        defer { sqlite3_finalize(stmt) }
+        bind(stmt: stmt!, index: 1, text: id.uuidString)
+        guard sqlite3_step(stmt) == SQLITE_DONE else {
+            throw DatabaseError.execFailed(String(cString: sqlite3_errmsg(db)))
+        }
+    }
+
+    /// Returns a map of profileId → set of assigned channel ids.
+    func fetchAllProfileChannels() throws -> [UUID: Set<UUID>] {
+        guard let db = db else { throw DatabaseError.openFailed("Not opened") }
+        let sql = "SELECT profile_id, channel_id FROM profile_channels;"
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            throw DatabaseError.prepareFailed(String(cString: sqlite3_errmsg(db)))
+        }
+        defer { sqlite3_finalize(stmt) }
+
+        var result: [UUID: Set<UUID>] = [:]
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            guard let profileId = UUID(uuidString: columnText(stmt!, 0)),
+                  let channelId = UUID(uuidString: columnText(stmt!, 1)) else { continue }
+            result[profileId, default: []].insert(channelId)
+        }
+        return result
+    }
+
+    /// Replaces a profile's channel assignments atomically.
+    func setProfileChannels(profileId: UUID, channelIds: [UUID]) throws {
+        try beginTransaction()
+        do {
+            guard let db = db else { throw DatabaseError.openFailed("Not opened") }
+            // Wipe existing assignments for this profile
+            let del = "DELETE FROM profile_channels WHERE profile_id=?;"
+            var delStmt: OpaquePointer?
+            guard sqlite3_prepare_v2(db, del, -1, &delStmt, nil) == SQLITE_OK else {
+                throw DatabaseError.prepareFailed(String(cString: sqlite3_errmsg(db)))
+            }
+            bind(stmt: delStmt!, index: 1, text: profileId.uuidString)
+            if sqlite3_step(delStmt) != SQLITE_DONE {
+                sqlite3_finalize(delStmt)
+                throw DatabaseError.execFailed(String(cString: sqlite3_errmsg(db)))
+            }
+            sqlite3_finalize(delStmt)
+
+            // Insert new ones, preserving the supplied order
+            let ins = "INSERT INTO profile_channels (profile_id, channel_id, sort_order) VALUES (?, ?, ?);"
+            for (i, cid) in channelIds.enumerated() {
+                var insStmt: OpaquePointer?
+                guard sqlite3_prepare_v2(db, ins, -1, &insStmt, nil) == SQLITE_OK else {
+                    throw DatabaseError.prepareFailed(String(cString: sqlite3_errmsg(db)))
+                }
+                bind(stmt: insStmt!, index: 1, text: profileId.uuidString)
+                bind(stmt: insStmt!, index: 2, text: cid.uuidString)
+                sqlite3_bind_int64(insStmt, 3, Int64(i))
+                if sqlite3_step(insStmt) != SQLITE_DONE {
+                    sqlite3_finalize(insStmt)
+                    throw DatabaseError.execFailed(String(cString: sqlite3_errmsg(db)))
+                }
+                sqlite3_finalize(insStmt)
+            }
+            try commitTransaction()
+        } catch {
+            rollbackTransaction()
+            throw error
+        }
+    }
+
     // MARK: - Helpers
 
     // H4 fix: Safe column text reader that handles NULL without crashing.

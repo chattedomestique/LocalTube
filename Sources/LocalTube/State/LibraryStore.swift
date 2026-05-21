@@ -18,6 +18,21 @@ final class LibraryStore {
     var channels: [Channel] = []
     var videos: [UUID: [Video]] = [:]
 
+    // Profiles — each profile carries a subset of channels it can see in
+    // viewer mode. Empty `profiles` falls back to "all channels visible."
+    var profiles: [Profile] = []
+    var profileChannels: [UUID: Set<UUID>] = [:]  // profileId → channelIds
+    var activeProfileId: UUID? {
+        didSet {
+            if let id = activeProfileId {
+                UserDefaults.standard.set(id.uuidString, forKey: Self.activeProfileKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: Self.activeProfileKey)
+            }
+        }
+    }
+    private static let activeProfileKey = "lt.activeProfileId"
+
     var undoManager: UndoManager?
 
     // MARK: - Lookup
@@ -53,9 +68,78 @@ final class LibraryStore {
                 vids = await healInterruptedDownloads(vids)
                 videos[channel.id] = vids
             }
+            // Profiles + assignments
+            profiles = try await DatabaseService.shared.fetchAllProfiles()
+            profileChannels = try await DatabaseService.shared.fetchAllProfileChannels()
+            // Restore the persisted active profile if it still exists. If the
+            // stored id refers to a deleted profile, fall back to nil so the
+            // user picks again.
+            if let stored = UserDefaults.standard.string(forKey: Self.activeProfileKey),
+               let storedId = UUID(uuidString: stored),
+               profiles.contains(where: { $0.id == storedId }) {
+                activeProfileId = storedId
+            } else {
+                activeProfileId = nil
+            }
         } catch {
             AppLogger.error("LibraryStore.load failed: \(error.localizedDescription)")
         }
+    }
+
+    // MARK: - Profile CRUD
+
+    func addProfile(_ profile: Profile) {
+        profiles.append(profile)
+        profiles.sort { $0.sortOrder < $1.sortOrder }
+        profileChannels[profile.id] = []
+        Task {
+            await persist("insertProfile") {
+                try await DatabaseService.shared.insertProfile(profile)
+            }
+        }
+    }
+
+    func updateProfile(_ profile: Profile) {
+        if let idx = profiles.firstIndex(where: { $0.id == profile.id }) {
+            profiles[idx] = profile
+            Task {
+                await persist("updateProfile") {
+                    try await DatabaseService.shared.updateProfile(profile)
+                }
+            }
+        }
+    }
+
+    func removeProfile(id: UUID) {
+        profiles.removeAll { $0.id == id }
+        profileChannels.removeValue(forKey: id)
+        if activeProfileId == id { activeProfileId = nil }
+        Task {
+            await persist("deleteProfile") {
+                try await DatabaseService.shared.deleteProfile(id: id)
+            }
+        }
+    }
+
+    func setProfileChannels(profileId: UUID, channelIds: [UUID]) {
+        profileChannels[profileId] = Set(channelIds)
+        let ids = channelIds
+        Task {
+            await persist("setProfileChannels") {
+                try await DatabaseService.shared.setProfileChannels(
+                    profileId: profileId, channelIds: ids
+                )
+            }
+        }
+    }
+
+    /// Channels visible to the active profile in viewer mode. If there's no
+    /// active profile (or no profiles at all), every channel is visible.
+    func visibleChannels(for profileId: UUID?) -> [Channel] {
+        guard let pid = profileId, let assigned = profileChannels[pid] else {
+            return channels
+        }
+        return channels.filter { assigned.contains($0.id) }
     }
 
     private func healInterruptedDownloads(_ vids: [Video]) async -> [Video] {

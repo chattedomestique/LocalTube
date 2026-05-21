@@ -113,6 +113,29 @@ final class BridgeEventEmitter {
             "editorRemainingSeconds": editorRemainingSeconds,
         ])
     }
+
+    // MARK: - Profile diff emitters
+
+    func emitProfileUpserted(_ profile: Profile) {
+        emit("profileUpserted", payload: ["profile": profile.bridgePayload()])
+    }
+
+    func emitProfileRemoved(id: UUID) {
+        emit("profileRemoved", payload: ["profileId": id.uuidString])
+    }
+
+    func emitProfileChannelsUpdated(profileId: UUID, channelIds: [UUID]) {
+        emit("profileChannelsUpdated", payload: [
+            "profileId": profileId.uuidString,
+            "channelIds": channelIds.map { $0.uuidString },
+        ])
+    }
+
+    func emitActiveProfileChanged(activeProfileId: UUID?) {
+        emit("activeProfileChanged", payload: [
+            "activeProfileId": activeProfileId?.uuidString as Any,
+        ])
+    }
 }
 
 // MARK: - Shared Formatter
@@ -159,7 +182,29 @@ extension AppState {
         // Channels currently being synced
         payload["syncingChannelIds"] = syncingChannelIds.map { $0.uuidString }
 
+        // Profiles
+        payload["profiles"] = profiles.map { $0.bridgePayload() }
+        var pcMap: [String: [String]] = [:]
+        for (pid, cids) in profileChannels {
+            pcMap[pid.uuidString] = cids.map { $0.uuidString }
+        }
+        payload["profileChannels"] = pcMap
+        payload["activeProfileId"] = activeProfileId?.uuidString as Any
+
         return payload
+    }
+}
+
+extension Profile {
+    func bridgePayload() -> [String: Any] {
+        var p: [String: Any] = [
+            "id":        id.uuidString,
+            "name":      name,
+            "sortOrder": sortOrder,
+            "createdAt": sharedISO8601Formatter.string(from: createdAt),
+        ]
+        if let emoji = emoji { p["emoji"] = emoji }
+        return p
     }
 }
 

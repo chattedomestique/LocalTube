@@ -29,6 +29,9 @@ const defaultState: AppState = {
   activeDownload: undefined,
   editorRemainingSeconds: 0,
   syncingChannelIds: [],
+  profiles: [],
+  profileChannels: {},
+  activeProfileId: undefined,
 }
 
 // ─── Store Shape ───────────────────────────────────────────────────────────
@@ -221,6 +224,40 @@ function applyBridgeEvent(app: AppState, event: BridgeEvent): AppState {
         ...app,
         appMode: event.payload.appMode,
         editorRemainingSeconds: event.payload.editorRemainingSeconds,
+      }
+    }
+    // ── Profile events ────────────────────────────────────────────────────
+    case 'profileUpserted': {
+      const { profile } = event.payload
+      const idx = app.profiles.findIndex(p => p.id === profile.id)
+      const profiles = idx === -1
+        ? [...app.profiles, profile].sort((a, b) => a.sortOrder - b.sortOrder)
+        : app.profiles.map((p, i) => (i === idx ? profile : p))
+      const profileChannels = app.profileChannels[profile.id]
+        ? app.profileChannels
+        : { ...app.profileChannels, [profile.id]: [] }
+      return { ...app, profiles, profileChannels }
+    }
+    case 'profileRemoved': {
+      const { profileId } = event.payload
+      const profiles = app.profiles.filter(p => p.id !== profileId)
+      const profileChannels = { ...app.profileChannels }
+      delete profileChannels[profileId]
+      const activeProfileId =
+        app.activeProfileId === profileId ? undefined : app.activeProfileId
+      return { ...app, profiles, profileChannels, activeProfileId }
+    }
+    case 'profileChannelsUpdated': {
+      const { profileId, channelIds } = event.payload
+      return {
+        ...app,
+        profileChannels: { ...app.profileChannels, [profileId]: channelIds },
+      }
+    }
+    case 'activeProfileChanged': {
+      return {
+        ...app,
+        activeProfileId: event.payload.activeProfileId ?? undefined,
       }
     }
     // folderSelected and pinValidated are handled via callbacks, not state

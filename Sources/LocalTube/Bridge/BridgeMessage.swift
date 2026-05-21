@@ -23,6 +23,12 @@ enum BridgeMessageType: String, Decodable {
     case checkDependencies
     case syncChannel
     case uploadChannelBanner
+    // Profiles
+    case setActiveProfile
+    case addProfile
+    case updateProfile
+    case deleteProfile
+    case setProfileChannels
 }
 
 struct BridgeMessage: Decodable {

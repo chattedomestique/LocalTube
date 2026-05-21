@@ -22,6 +22,10 @@ enum DatabaseMigrations {
             try migration4AddVideosSortIndex(db: db)
             setUserVersion(db: db, version: 4)
         }
+        if currentVersion < 5 {
+            try migration5AddProfiles(db: db)
+            setUserVersion(db: db, version: 5)
+        }
     }
 
     // MARK: - Version Tracking
@@ -111,6 +115,41 @@ enum DatabaseMigrations {
 
     private static func migration4AddVideosSortIndex(db: OpaquePointer) throws {
         try exec(db: db, sql: "CREATE INDEX IF NOT EXISTS idx_videos_channel_sort ON videos(channel_id, sort_order);")
+    }
+
+    // MARK: - Migration 5: Profiles + profile_channels junction
+    //
+    // Profiles let families curate per-kid views of the library. Each
+    // profile is assigned a subset of channels through the junction table.
+    // ON DELETE CASCADE on both FKs keeps the junction clean when either
+    // side is deleted — no orphaned assignments to garbage-collect.
+
+    private static func migration5AddProfiles(db: OpaquePointer) throws {
+        let sql = """
+        BEGIN TRANSACTION;
+
+        CREATE TABLE IF NOT EXISTS profiles (
+            id TEXT PRIMARY KEY NOT NULL,
+            name TEXT NOT NULL,
+            emoji TEXT,
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            created_at REAL NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS profile_channels (
+            profile_id TEXT NOT NULL,
+            channel_id TEXT NOT NULL,
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY (profile_id, channel_id),
+            FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE,
+            FOREIGN KEY (channel_id) REFERENCES channels(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_profile_channels_profile ON profile_channels(profile_id);
+
+        COMMIT;
+        """
+        try exec(db: db, sql: sql)
     }
 
     // MARK: - Helpers

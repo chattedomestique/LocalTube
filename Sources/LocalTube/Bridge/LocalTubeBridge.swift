@@ -60,6 +60,11 @@ final class LocalTubeBridge: NSObject, WKScriptMessageHandler {
         case .checkDependencies: handleCheckDependencies()
         case .syncChannel:         handleSyncChannel(payloadDict)
         case .uploadChannelBanner: handleUploadChannelBanner(payloadDict)
+        case .setActiveProfile:    handleSetActiveProfile(payloadDict)
+        case .addProfile:          handleAddProfile(payloadDict)
+        case .updateProfile:       handleUpdateProfile(payloadDict)
+        case .deleteProfile:       handleDeleteProfile(payloadDict)
+        case .setProfileChannels:  handleSetProfileChannels(payloadDict)
         }
     }
 
@@ -362,5 +367,84 @@ final class LocalTubeBridge: NSObject, WKScriptMessageHandler {
             appState.dependencyStatus = appState.dependencyService.status
             self.emitter.emitStateUpdate(appState)
         }
+    }
+
+    // MARK: - Profiles
+
+    private func handleSetActiveProfile(_ payload: [String: Any]) {
+        guard let appState else { return }
+        // payload.profileId is either a UUID string or null (clear).
+        if let raw = payload["profileId"] as? String, let id = UUID(uuidString: raw) {
+            appState.activeProfileId = id
+        } else {
+            appState.activeProfileId = nil
+        }
+        emitter.emitActiveProfileChanged(activeProfileId: appState.activeProfileId)
+    }
+
+    private func handleAddProfile(_ payload: [String: Any]) {
+        guard let appState,
+              let name = payload["name"] as? String,
+              !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              name.count <= 60 else {
+            AppLogger.error("Bridge: addProfile rejected — invalid name")
+            return
+        }
+        let emoji = payload["emoji"] as? String
+        let channelIds: [UUID] = (payload["channelIds"] as? [String])?
+            .compactMap(UUID.init(uuidString:)) ?? []
+        let profile = Profile(
+            name: name,
+            emoji: emoji,
+            sortOrder: appState.profiles.count
+        )
+        appState.addProfile(profile)
+        if !channelIds.isEmpty {
+            appState.setProfileChannels(profileId: profile.id, channelIds: channelIds)
+        }
+        emitter.emitProfileUpserted(profile)
+        if !channelIds.isEmpty {
+            emitter.emitProfileChannelsUpdated(profileId: profile.id, channelIds: channelIds)
+        }
+    }
+
+    private func handleUpdateProfile(_ payload: [String: Any]) {
+        guard let appState,
+              let raw = payload["id"] as? String,
+              let id = UUID(uuidString: raw),
+              var profile = appState.profiles.first(where: { $0.id == id }) else { return }
+
+        if let name = payload["name"] as? String,
+           !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+           name.count <= 60 {
+            profile.name = name
+        }
+        if let emoji = payload["emoji"] as? String {
+            profile.emoji = emoji.isEmpty ? nil : emoji
+        }
+        appState.updateProfile(profile)
+        emitter.emitProfileUpserted(profile)
+    }
+
+    private func handleDeleteProfile(_ payload: [String: Any]) {
+        guard let appState,
+              let raw = payload["profileId"] as? String,
+              let id = UUID(uuidString: raw) else { return }
+        let wasActive = appState.activeProfileId == id
+        appState.removeProfile(id: id)
+        emitter.emitProfileRemoved(id: id)
+        if wasActive {
+            emitter.emitActiveProfileChanged(activeProfileId: nil)
+        }
+    }
+
+    private func handleSetProfileChannels(_ payload: [String: Any]) {
+        guard let appState,
+              let raw = payload["profileId"] as? String,
+              let id = UUID(uuidString: raw),
+              let rawIds = payload["channelIds"] as? [String] else { return }
+        let channelIds = rawIds.compactMap(UUID.init(uuidString:))
+        appState.setProfileChannels(profileId: id, channelIds: channelIds)
+        emitter.emitProfileChannelsUpdated(profileId: id, channelIds: channelIds)
     }
 }

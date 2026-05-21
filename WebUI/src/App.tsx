@@ -7,6 +7,8 @@ import Library from './screens/Library'
 import Channel from './screens/Channel'
 import Settings from './screens/Settings'
 import Editor from './screens/Editor'
+import Profiles from './screens/Profiles'
+import ProfilePicker from './screens/ProfilePicker'
 
 // H6 fix: React error boundary prevents a white screen on uncaught render errors.
 // Shows a recoverable error UI and logs the error to Swift via the bridge.
@@ -89,7 +91,7 @@ class ErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryStat
 
 function AppContent() {
   const { state, nav } = useAppStore()
-  const { isOnboarding, needsPINSetup, showPINEntry, appMode } = state
+  const { isOnboarding, needsPINSetup, showPINEntry, appMode, profiles, activeProfileId } = state
 
   // Full-screen flows
   if (isOnboarding) {
@@ -106,6 +108,8 @@ function AppContent() {
   // In editor mode, the editor screen is the default unless on settings
   if (appMode === 'editor' && nav.screen === 'editor') {
     screen = <Editor />
+  } else if (appMode === 'editor' && nav.screen === 'profiles') {
+    screen = <Profiles />
   } else {
     switch (nav.screen) {
       case 'library':
@@ -121,16 +125,26 @@ function AppContent() {
         // Accessed from library when in editor mode
         screen = <Editor />
         break
+      case 'profiles':
+        screen = <Profiles />
+        break
       default:
         screen = <Library />
     }
   }
+
+  // Profile picker is shown in viewer mode when at least one profile
+  // exists and none is selected. Editor mode bypasses the picker — parents
+  // are always operating against the full catalog.
+  const showProfilePicker =
+    appMode !== 'editor' && profiles.length > 0 && !activeProfileId
 
   return (
     <>
       {screen}
       {/* PIN Entry modal overlays whatever screen is shown */}
       {showPINEntry && <PINEntry />}
+      {showProfilePicker && <ProfilePicker />}
     </>
   )
 }

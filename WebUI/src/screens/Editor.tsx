@@ -190,6 +190,20 @@ export default function Editor() {
           </div>
         )}
 
+        {/* Profiles */}
+        <button
+          className="lt-btn-secondary"
+          onClick={() => navigateTo({ screen: 'profiles' })}
+          style={{ padding: '6px 12px', fontSize: 12 }}
+          title="Manage profiles"
+        >
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+            <circle cx="6" cy="4.5" r="2" stroke="currentColor" strokeWidth="1.3" fill="none" />
+            <path d="M2 10C2 8 4 7 6 7C8 7 10 8 10 10" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" fill="none" />
+          </svg>
+          Profiles
+        </button>
+
         {/* Exit editor */}
         <button
           className="lt-btn-secondary"

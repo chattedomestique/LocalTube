@@ -5,16 +5,9 @@ import AddVideosModal from '../components/AddVideosModal'
 import VideoCard from '../components/VideoCard'
 import type { Channel, ChannelType } from '../types'
 
-function formatTimer(seconds: number): string {
-  if (seconds <= 0) return '0:00'
-  const m = Math.floor(seconds / 60)
-  const s = seconds % 60
-  return `${m}:${s.toString().padStart(2, '0')}`
-}
-
 export default function Editor() {
-  const { state, navigateTo, send } = useAppStore()
-  const { channels, videos, editorRemainingSeconds, activeDownload } = state
+  const { state, send } = useAppStore()
+  const { channels, videos, activeDownload } = state
 
   const [selectedChannelId, setSelectedChannelId] = useState<string | null>(
     channels[0]?.id ?? null
@@ -22,7 +15,6 @@ export default function Editor() {
   const [hoveredChannelId, setHoveredChannelId] = useState<string | null>(null)
   const [showAddChannel, setShowAddChannel] = useState(false)
   const [showAddVideos, setShowAddVideos] = useState(false)
-  const [showExitConfirm, setShowExitConfirm] = useState(false)
   const [editingChannelId, setEditingChannelId] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
   const [editEmoji, setEditEmoji] = useState('')
@@ -80,12 +72,6 @@ export default function Editor() {
     setEditingChannelId(null)
   }
 
-  const handleExitEditor = () => {
-    send({ type: 'exitEditorMode' })
-    navigateTo({ screen: 'library' })
-  }
-
-  const isUrgent = editorRemainingSeconds > 0 && editorRemainingSeconds <= 60
 
   return (
     <div className="screen-enter" style={{
@@ -94,131 +80,7 @@ export default function Editor() {
       height: '100%',
       background: 'var(--bg)',
     }}>
-      {/* Top bar */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        padding: '0 20px',
-        height: 52,
-        borderBottom: '1px solid var(--border)',
-        background: 'rgba(13,13,15,0.95)',
-        backdropFilter: 'blur(12px)',
-        flexShrink: 0,
-        gap: 12,
-      }}>
-        {/* Back */}
-        <button
-          className="lt-btn-ghost"
-          onClick={() => navigateTo({ screen: 'library' })}
-          style={{ padding: '5px 10px', gap: 4, color: 'var(--text-secondary)', fontSize: 13 }}
-        >
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-            <path d="M9 2.5L4.5 7L9 11.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-          Library
-        </button>
-        <div style={{ width: 1, height: 16, background: 'var(--border)' }} />
-
-        {/* Title */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{
-            width: 22,
-            height: 22,
-            borderRadius: 6,
-            background: 'var(--accent-dim)',
-            border: '1px solid rgba(155,93,229,0.3)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}>
-            <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
-              <path d="M9.5 1.5L10.5 2.5L3.5 9.5H2.5V8.5L9.5 1.5Z" stroke="var(--accent)" strokeWidth="1.3" strokeLinejoin="round" fill="none" />
-            </svg>
-          </div>
-          <span style={{ fontSize: 14, fontWeight: 700, letterSpacing: '-0.01em', color: 'var(--accent)' }}>
-            Editor Mode
-          </span>
-        </div>
-
-        {/* Active download */}
-        {activeDownload && (
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-            padding: '3px 10px',
-            borderRadius: 99,
-            background: 'var(--surface-el)',
-            border: '1px solid var(--border)',
-          }}>
-            <svg className="spinner" width="11" height="11" viewBox="0 0 11 11" fill="none">
-              <circle cx="5.5" cy="5.5" r="4" stroke="rgba(255,255,255,0.2)" strokeWidth="1.5" />
-              <path d="M5.5 1.5A4 4 0 0 1 9.5 5.5" stroke="var(--accent)" strokeWidth="1.5" strokeLinecap="round" />
-            </svg>
-            <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
-              {Math.round(activeDownload.progress * 100)}%
-            </span>
-          </div>
-        )}
-
-        <div style={{ flex: 1 }} />
-
-        {/* Timer */}
-        {editorRemainingSeconds > 0 && (
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-            padding: '4px 10px',
-            borderRadius: 8,
-            background: isUrgent ? 'rgba(248,113,113,0.1)' : 'var(--surface-el)',
-            border: `1px solid ${isUrgent ? 'rgba(248,113,113,0.3)' : 'var(--border)'}`,
-          }}>
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-              <circle cx="6" cy="6.5" r="4.5" stroke={isUrgent ? '#f87171' : 'var(--text-tertiary)'} strokeWidth="1.3" fill="none" />
-              <path d="M6 4V6.5L7.5 8" stroke={isUrgent ? '#f87171' : 'var(--text-tertiary)'} strokeWidth="1.3" strokeLinecap="round" />
-              <path d="M4.5 1.5H7.5" stroke={isUrgent ? '#f87171' : 'var(--text-tertiary)'} strokeWidth="1.3" strokeLinecap="round" />
-            </svg>
-            <span style={{
-              fontSize: 12,
-              fontWeight: 600,
-              fontFamily: 'ui-monospace, monospace',
-              color: isUrgent ? 'var(--destructive)' : 'var(--text-secondary)',
-            }}>
-              {formatTimer(editorRemainingSeconds)}
-            </span>
-          </div>
-        )}
-
-        {/* Profiles */}
-        <button
-          className="lt-btn-secondary"
-          onClick={() => navigateTo({ screen: 'profiles' })}
-          style={{ padding: '6px 12px', fontSize: 12 }}
-          title="Manage profiles"
-        >
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-            <circle cx="6" cy="4.5" r="2" stroke="currentColor" strokeWidth="1.3" fill="none" />
-            <path d="M2 10C2 8 4 7 6 7C8 7 10 8 10 10" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" fill="none" />
-          </svg>
-          Profiles
-        </button>
-
-        {/* Exit editor */}
-        <button
-          className="lt-btn-secondary"
-          onClick={() => setShowExitConfirm(true)}
-          style={{ padding: '6px 12px', fontSize: 12 }}
-        >
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-            <rect x="2" y="5" width="8" height="6" rx="1.5" stroke="currentColor" strokeWidth="1.3" fill="none" />
-            <path d="M4 5V4C4 2.9 4.9 2 6 2C7.1 2 8 2.9 8 4V5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" fill="none" />
-          </svg>
-          Exit Editor
-        </button>
-      </div>
-
-      {/* Body: sidebar + detail */}
+      {/* Body: sidebar + detail. Top bar is provided by EditorShell. */}
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
         {/* Left sidebar */}
         <div style={{
@@ -631,33 +493,6 @@ export default function Editor() {
         ) : null
       })()}
 
-      {/* Exit editor confirm */}
-      {showExitConfirm && (
-        <div className="modal-backdrop" role="presentation">
-          <div className="modal-panel" role="dialog" aria-modal="true" aria-label="Confirm exit editor mode" style={{ width: 320, padding: '28px' }}>
-            <h2 style={{ fontSize: 16, marginBottom: 8 }}>Exit Editor Mode?</h2>
-            <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 20 }}>
-              You'll need to enter your PIN again to re-enter editor mode.
-            </p>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button
-                className="lt-btn-secondary"
-                onClick={() => setShowExitConfirm(false)}
-                style={{ flex: 1, justifyContent: 'center' }}
-              >
-                Stay
-              </button>
-              <button
-                className="lt-btn-primary"
-                onClick={handleExitEditor}
-                style={{ flex: 1, justifyContent: 'center' }}
-              >
-                Exit
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

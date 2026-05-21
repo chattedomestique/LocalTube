@@ -13,12 +13,16 @@ export default function ColorPicker({
 }) {
   return (
     <div style={{
-      // 6 cols × 2 rows fits any reasonable modal width without overflow,
-      // and bigger touch targets read better than a cramped single row.
+      // auto-fit + minmax = the grid sizes itself to ANY container width
+      // without overflowing. The previous fixed-column version still
+      // spilled out of the narrow sidebar (260 px) because 6 × 34 px +
+      // 5 × 12 px gap = 264 px. With this layout the cells shrink to
+      // fit and the swatches stay centered inside their cell.
       display: 'grid',
-      gridTemplateColumns: 'repeat(6, 1fr)',
-      gap: 12,
+      gridTemplateColumns: 'repeat(auto-fit, minmax(34px, 1fr))',
+      gap: 10,
       justifyItems: 'center',
+      width: '100%',
     }}>
       {PROFILE_COLORS.map(c => {
         const selected = value === c.key
@@ -30,8 +34,8 @@ export default function ColorPicker({
             title={c.label}
             aria-label={c.label}
             style={{
-              width: 34,
-              height: 34,
+              width: 30,
+              height: 30,
               borderRadius: '50%',
               background: c.hex,
               border: selected

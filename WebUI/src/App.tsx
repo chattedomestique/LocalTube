@@ -1,4 +1,4 @@
-import { Component, type ReactNode, type ErrorInfo } from 'react'
+import { Component, useEffect, type ReactNode, type ErrorInfo } from 'react'
 import { AppStoreProvider, useAppStore } from './store'
 import Onboarding from './screens/Onboarding'
 import PINSetup from './screens/PINSetup'
@@ -9,6 +9,8 @@ import Settings from './screens/Settings'
 import Editor from './screens/Editor'
 import Profiles from './screens/Profiles'
 import ProfilePicker from './screens/ProfilePicker'
+import EditorShell from './components/EditorShell'
+import MountWithExit from './components/MountWithExit'
 
 // H6 fix: React error boundary prevents a white screen on uncaught render errors.
 // Shows a recoverable error UI and logs the error to Swift via the bridge.
@@ -89,9 +91,28 @@ class ErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryStat
   }
 }
 
+// Tabs that live INSIDE the unified Editor shell. nav.screen values
+// matching these are routed through EditorShell with the matching tab
+// active.
+const EDITOR_TAB_SCREENS = new Set(['editor', 'profiles', 'settings'])
+
 function AppContent() {
-  const { state, nav } = useAppStore()
+  const { state, nav, navigateTo } = useAppStore()
   const { isOnboarding, needsPINSetup, showPINEntry, appMode, profiles, activeProfileId } = state
+
+  // ── Mode-driven auto-navigation ────────────────────────────────────────
+  // Entering editor mode always lands you on the Editor shell (Channels
+  // tab by default). Exiting always returns you to the library (or the
+  // picker if profiles exist and none is selected — handled below).
+  // This eliminates the previous mess where Library kept showing in
+  // editor mode and you had to know about a separate "Manage" button.
+  useEffect(() => {
+    if (appMode === 'editor' && !EDITOR_TAB_SCREENS.has(nav.screen)) {
+      navigateTo({ screen: 'editor' })
+    } else if (appMode === 'viewer' && EDITOR_TAB_SCREENS.has(nav.screen)) {
+      navigateTo({ screen: 'library' })
+    }
+  }, [appMode, nav.screen, navigateTo])
 
   // Full-screen flows
   if (isOnboarding) {
@@ -102,54 +123,49 @@ function AppContent() {
     return <PINSetup />
   }
 
-  // Render the current screen
-  let screen: ReactNode = null
-
-  // In editor mode, the editor screen is the default unless on settings
-  if (appMode === 'editor' && nav.screen === 'editor') {
-    screen = <Editor />
-  } else if (appMode === 'editor' && nav.screen === 'profiles') {
-    screen = <Profiles />
+  // Render the current screen.
+  // In editor mode, the three editor tabs (Channels/Profiles/Settings)
+  // all render through the unified EditorShell so they share one top bar
+  // with tabs + Exit. In viewer mode, we just render the raw screen.
+  let screen: ReactNode
+  if (appMode === 'editor' && EDITOR_TAB_SCREENS.has(nav.screen)) {
+    const tabContent =
+      nav.screen === 'profiles' ? <Profiles />
+      : nav.screen === 'settings' ? <Settings />
+      : <Editor />
+    screen = (
+      <EditorShell activeTab={nav.screen as 'editor' | 'profiles' | 'settings'}>
+        {tabContent}
+      </EditorShell>
+    )
   } else {
     switch (nav.screen) {
+      case 'channel':  screen = <Channel />;  break
+      case 'settings': screen = <Settings />; break  // viewer-mode fallback
+      case 'editor':   screen = <Library />;  break  // safety: viewer w/ stale nav
+      case 'profiles': screen = <Library />;  break  // safety: viewer w/ stale nav
       case 'library':
-        screen = <Library />
-        break
-      case 'channel':
-        screen = <Channel />
-        break
-      case 'settings':
-        screen = <Settings />
-        break
-      case 'editor':
-        // Accessed from library when in editor mode
-        screen = <Editor />
-        break
-      case 'profiles':
-        screen = <Profiles />
-        break
       default:
         screen = <Library />
     }
   }
 
   // Profile picker is shown in viewer mode when at least one profile
-  // exists and none is selected. Editor mode bypasses the picker — parents
-  // are always operating against the full catalog.
+  // exists and none is selected. Editor mode bypasses the picker.
   const showProfilePicker =
     appMode !== 'editor' && profiles.length > 0 && !activeProfileId
 
   return (
     <>
       {screen}
-      {/* ProfilePicker comes before PINEntry in source order so PIN
-          modals stack visually on TOP of the picker. (Source order =
-          z-index when both use the default stacking context.) Otherwise
-          clicking Editor/Settings on the picker pops the PIN modal
-          behind the picker — invisible until something dismissed the
-          picker. */}
-      {showProfilePicker && <ProfilePicker />}
-      {showPINEntry && <PINEntry />}
+      {/* Overlays wrapped in MountWithExit so they fade out smoothly
+          instead of popping when their condition flips false. */}
+      <MountWithExit show={showProfilePicker}>
+        <ProfilePicker />
+      </MountWithExit>
+      <MountWithExit show={showPINEntry}>
+        <PINEntry />
+      </MountWithExit>
     </>
   )
 }

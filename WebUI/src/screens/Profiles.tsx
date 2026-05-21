@@ -6,6 +6,9 @@ import IconPicker from '../components/IconPicker'
 import ColorPicker from '../components/ColorPicker'
 import { colorHex, DEFAULT_PROFILE_COLOR } from '../lib/profileColors'
 
+// Profiles tab content. The top bar (tabs + Exit) is provided by
+// EditorShell — this component renders only the sidebar + detail body.
+
 /**
  * Editor-mode screen for managing profiles. Lives under the Editor area;
  * reached from the Editor top bar. Lets parents create, customize
@@ -13,7 +16,7 @@ import { colorHex, DEFAULT_PROFILE_COLOR } from '../lib/profileColors'
  * profile sees.
  */
 export default function Profiles() {
-  const { state, navigateTo, send } = useAppStore()
+  const { state, send } = useAppStore()
   const { profiles, channels, profileChannels } = state
 
   const sortedProfiles = [...profiles].sort((a, b) => a.sortOrder - b.sortOrder)
@@ -105,43 +108,6 @@ export default function Profiles() {
       height: '100%',
       background: 'var(--bg)',
     }}>
-      {/* Top bar */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        padding: '0 20px',
-        height: 52,
-        borderBottom: '1px solid var(--border)',
-        background: 'rgba(13,13,15,0.95)',
-        backdropFilter: 'blur(12px)',
-        flexShrink: 0,
-        gap: 12,
-      }}>
-        <button
-          className="lt-btn-ghost"
-          onClick={() => navigateTo({ screen: 'editor' })}
-          style={{ padding: '5px 10px', gap: 4, color: 'var(--text-secondary)', fontSize: 13 }}
-        >
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-            <path d="M9 2.5L4.5 7L9 11.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-          Editor
-        </button>
-        <div style={{ width: 1, height: 16, background: 'var(--border)' }} />
-        <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>Profiles</span>
-        <div style={{ flex: 1 }} />
-        <button
-          className="lt-btn-primary"
-          onClick={() => setShowAdd(true)}
-          style={{ fontSize: 13, padding: '6px 12px' }}
-        >
-          <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-            <path d="M6.5 2V11M2 6.5H11" stroke="white" strokeWidth="1.8" strokeLinecap="round" />
-          </svg>
-          New Profile
-        </button>
-      </div>
-
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
         {/* Sidebar: profile list */}
         <div style={{
@@ -283,6 +249,22 @@ export default function Profiles() {
               })
             )}
           </div>
+          {/* New Profile CTA — bottom of sidebar (replaces the top-bar
+              "New Profile" button that lived on the old Profiles top bar). */}
+          {sortedProfiles.length > 0 && (
+            <div style={{ padding: '10px', borderTop: '1px solid var(--border)' }}>
+              <button
+                className="lt-btn-primary"
+                onClick={() => setShowAdd(true)}
+                style={{ width: '100%', justifyContent: 'center', fontSize: 13, padding: '9px 12px' }}
+              >
+                <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+                  <path d="M6.5 2V11M2 6.5H11" stroke="white" strokeWidth="1.8" strokeLinecap="round" />
+                </svg>
+                New Profile
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Right panel: channel assignment */}

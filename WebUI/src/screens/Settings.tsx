@@ -65,7 +65,7 @@ function Divider() {
 }
 
 export default function Settings() {
-  const { state, navigateTo, send, setOnFolderSelected } = useAppStore()
+  const { state, send, setOnFolderSelected } = useAppStore()
   const { settings, dependencyStatus } = state
   const [local, setLocal] = useState<AppSettings>({ ...settings })
   const [saved, setSaved] = useState(false)
@@ -107,40 +107,7 @@ export default function Settings() {
       height: '100%',
       background: 'var(--bg)',
     }}>
-      {/* Top bar */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        padding: '0 20px',
-        height: 56,
-        background: 'linear-gradient(135deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.04) 100%)',
-        backgroundColor: 'rgba(13,13,15,0.82)',
-        backdropFilter: 'blur(24px) saturate(180%)',
-        WebkitBackdropFilter: 'blur(24px) saturate(180%)',
-        borderBottom: '0.5px solid rgba(255,255,255,0.1)',
-        flexShrink: 0,
-        gap: 12,
-      }}>
-        <button
-          className="lt-btn-ghost"
-          onClick={() => navigateTo({ screen: 'library' })}
-          aria-label="Back to Library"
-          style={{ padding: '6px 10px', gap: 4, color: 'var(--text-secondary)' }}
-        >
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <path d="M10 3L5 8L10 13" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-          Library
-        </button>
-        <div style={{ width: 1, height: 18, background: 'var(--border)' }} />
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <circle cx="8" cy="8" r="2.5" stroke="var(--text-secondary)" strokeWidth="1.5" />
-            <path d="M8 1.5V3M8 13V14.5M14.5 8H13M3 8H1.5M12.95 3.05l-.95.95M4 12l-.95.95M12.95 12.95l-.95-.95M4 4l-.95-.95" stroke="var(--text-secondary)" strokeWidth="1.5" strokeLinecap="round" />
-          </svg>
-          <h1 style={{ fontSize: 16, fontWeight: 700 }}>Settings</h1>
-        </div>
-      </div>
+      {/* Top bar provided by EditorShell — Settings just renders content. */}
 
       {/* Content */}
       <div style={{

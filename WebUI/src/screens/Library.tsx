@@ -105,64 +105,21 @@ export default function Library() {
 
         <div style={{ flex: activeDownload ? 0 : 1 }} />
 
-        {/* Right actions.
-            HIERARCHY:
-              1. Manage (primary CTA — the thing parents come here to do)
-              2. Settings (secondary — gear icon, label)
-              3. Exit (tertiary — door icon, label, subtle destructive tint)
-            All three use the same TopBarButton shell so heights, padding,
-            label sizes, and gaps match. Settings was a sun before — now a
-            standard gear, which is the universally-recognised icon. */}
+        {/* Right actions — Library is viewer-only now. Entering editor
+            mode auto-navigates to EditorShell (handled in App.tsx).
+              - With profiles: profile chip (click → back to picker)
+              - Without profiles: one Editor entry so the parent can
+                still get in on a fresh install. */}
         <div style={{
           display: 'flex',
           alignItems: 'center',
           gap: 8,
         } as CSSProperties}>
-          {appMode === 'editor' ? (
-            <>
-              <TopBarButton
-                kind="primary"
-                onClick={() => navigateTo({ screen: 'editor' })}
-                label="Manage"
-                icon={(
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                    <path d="M10 1.5L12.5 4L4.5 12H2V9.5L10 1.5Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" fill="none" />
-                  </svg>
-                )}
-              />
-              <TopBarButton
-                kind="secondary"
-                onClick={() => navigateTo({ screen: 'settings' })}
-                label="Settings"
-                icon={(
-                  // Universally-recognised gear (replaces the prior sun)
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                    <circle cx="7" cy="7" r="2.2" stroke="currentColor" strokeWidth="1.4" fill="none" />
-                    <path d="M7 0.8v1.6M7 11.6v1.6M13.2 7h-1.6M2.4 7H0.8M11.38 2.62l-1.13 1.13M3.75 10.25l-1.13 1.13M11.38 11.38l-1.13-1.13M3.75 3.75l-1.13-1.13" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-                  </svg>
-                )}
-              />
-              <TopBarButton
-                kind="exit"
-                onClick={handleEditorToggle}
-                label="Exit Editor"
-                icon={(
-                  // Open-door icon — clearly says "leave"
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                    <path d="M8 1.5H12V12.5H8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-                    <path d="M9 7H2M2 7L4 5M2 7L4 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                )}
-              />
-            </>
-          ) : activeProfile ? (
-            // Viewer + active profile: only the chip. Click → back to picker.
+          {activeProfile ? (
             <ProfileChip profile={activeProfile} onClick={() =>
               send({ type: 'setActiveProfile', payload: { profileId: null } })
             } />
           ) : (
-            // Viewer + no profile (none set up): keep one Editor entry
-            // so the parent can still get in on a fresh install.
             <TopBarButton
               kind="secondary"
               onClick={handleEditorToggle}

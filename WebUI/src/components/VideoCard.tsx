@@ -1,25 +1,26 @@
-import { memo, useState, useLayoutEffect, useRef } from 'react'
+import { memo, useLayoutEffect, useRef } from 'react'
 import type { Video } from '../types'
 import { thumbUrl } from '../utils'
 
 /**
- * Thumbnail with a soft fade-in once the image has actually decoded.
+ * Thumbnail with an eager off-thread decode on mount.
  *
- * Why this exists: even with `loading="eager"` and `decoding="async"` the
- * <img> renders its pixels only after the decoder finishes — and the
- * decoder runs in the background at whatever pace it can manage. With 24+
- * cards in a grid all firing off-thread decodes at once, the pixels pop
- * in at different times. Visually that reads as "blinking" as the user
- * scrolls. Rendering each img at opacity 0 until its `onload` fires (and
- * then transitioning to its target opacity) replaces the pop with a
- * 280 ms ease-out fade — invisible per-image, smooth in aggregate.
+ * The previous "blinking as we scroll" was decoder lag, not decode-time
+ * fade absence: browsers defer decoding off-screen images even with
+ * loading="eager", so as scroll exposes a thumbnail the decoder runs at
+ * that moment and pixels appear with a perceptible pop. A JS fade-in
+ * actually made things worse — it exposed a 280 ms gray placeholder
+ * before fading in, and stacked with the .reveal card-level fade.
  *
- * Cached-image case: by the time React commits the initial render, the
- * browser may already have decoded the image. In that case `onload` never
- * fires (or fired before our listener attached). We detect this in a
- * useLayoutEffect by checking img.complete + naturalWidth and flip
- * loaded=true synchronously before paint, so the transition starts from
- * the already-loaded state without a stuck-at-0 frame.
+ * The real fix is HTMLImageElement.decode(): call it immediately on
+ * mount and the browser eagerly decodes the image on a worker, so by
+ * the time the user scrolls the card into view the pixels are ready
+ * and the img element paints them on the next frame with no pop.
+ *
+ * No state, no transitions, no re-renders — the decode call is
+ * fire-and-forget. The img element is otherwise identical to a plain
+ * <img>; the wrapping .reveal card animation still does the
+ * mount-time fade.
  */
 export function Thumb({ video, style, className }: {
   video: Pick<Video, 'thumbnailPath' | 'thumbnailVersion'>
@@ -27,25 +28,19 @@ export function Thumb({ video, style, className }: {
   className?: string
 }) {
   const url = thumbUrl(video)
-  const [loaded, setLoaded] = useState(false)
   const imgRef = useRef<HTMLImageElement>(null)
 
-  // Cached-image safety net: if the browser has already decoded the image
-  // by the time we mount (or by the time the url changes), onload may have
-  // already fired or won't fire at all. Detect synchronously.
   useLayoutEffect(() => {
     const img = imgRef.current
-    if (img && img.complete && img.naturalWidth > 0) {
-      setLoaded(true)
-    }
+    if (!img) return
+    // .decode() returns a promise that resolves when the image is loaded
+    // AND decoded and ready for paint. Calling it without awaiting still
+    // schedules the decode eagerly — by the time the img is scrolled
+    // into view, it's already decoded so painting is instant.
+    img.decode().catch(() => { /* ignore — onError handles real failures */ })
   }, [url])
 
   if (!url) return null
-
-  // Preserve any caller-supplied target opacity (e.g. the bg blur layers
-  // use 0.52 and 0.18). Default to fully opaque.
-  const styleOpacity = style?.opacity
-  const targetOpacity = styleOpacity === undefined ? 1 : Number(styleOpacity)
 
   return (
     <img
@@ -55,13 +50,8 @@ export function Thumb({ video, style, className }: {
       className={className}
       loading="eager"
       decoding="async"
-      onLoad={() => setLoaded(true)}
       onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
-      style={{
-        ...style,
-        opacity: loaded ? targetOpacity : 0,
-        transition: style?.transition ?? 'opacity 280ms ease-out',
-      }}
+      style={style}
     />
   )
 }

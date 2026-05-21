@@ -591,38 +591,12 @@ input, textarea, [contenteditable] {
   contain: layout style paint;
 }
 
-/* ─── Scroll-driven channel header animations ────────────────────────────── */
-/* animation-timeline: scroll(nearest) hands the animation to the browser's   */
-/* compositor — it ticks at the same rate as native scroll (120 Hz on M-      */
-/* series), not at the JS scroll-event rate (which is far slower and          */
-/* irregular). JS-driven equivalents look smooth on the container but the     */
-/* JS-mutated property always lags the scroll in discrete steps.              */
-
-/* Banner img parallax — translates 0→150px as scrollTop goes 0→300, so the */
-/* photo appears to drift away at half scroll speed. */
-@keyframes lt-banner-parallax {
-  from { transform: translate3d(0, 0, 0); }
-  to   { transform: translate3d(0, 150px, 0); }
-}
-.lt-banner-parallax {
-  animation: lt-banner-parallax linear both;
-  animation-timeline: scroll(nearest);
-  animation-range: 0 300px;
-  will-change: transform;
-}
-
-/* Top-bar elevation shadow — fades in over the last 100 px of banner */
-/* scroll so the sticky header acquires a sense of layer just as the */
-/* banner is disappearing underneath it. */
-@keyframes lt-topbar-elevate {
-  from { box-shadow: 0 0 0 rgba(0, 0, 0, 0); }
-  to   { box-shadow: 0 6px 22px rgba(0, 0, 0, 0.35); }
-}
-.lt-topbar-elevate {
-  animation: lt-topbar-elevate linear both;
-  animation-timeline: scroll(nearest);
-  animation-range: 200px 300px;
-}
+/* Header parallax + elevation shadow are now driven by a continuous     */
+/* requestAnimationFrame loop in Channel.tsx that reads scrollTop on     */
+/* every frame and writes transform / box-shadow via refs. CSS           */
+/* scroll-driven animations (animation-timeline: scroll(...)) would be   */
+/* the ideal home for this but aren't shipping in our WebKit yet —       */
+/* using them produced animations stuck at the end keyframe.             */
 
 /* ─── Thumbnail zoom helper ───────────────────────────────────────────────── */
 .lt-thumb {

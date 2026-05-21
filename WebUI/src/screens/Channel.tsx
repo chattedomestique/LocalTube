@@ -39,20 +39,61 @@ export default function Channel() {
   // they latch to the viewport top as the banner passes. The browser
   // handles the collapse 100% on the compositor.
   //
-  // The two scroll-linked visual effects — banner img parallax and the
-  // top-bar elevation shadow — are now driven by CSS scroll-driven
-  // animations (animation-timeline: scroll() in index.css). The compositor
-  // ticks them at native scroll rate; JS is not involved per frame, which
-  // is what fixes the "image is choppy even though container is smooth"
-  // problem. No scroll handler in this component at all.
+  // For the two scroll-linked visual effects — banner img parallax and
+  // top-bar elevation shadow — we run a *continuous* requestAnimationFrame
+  // loop (mounted while the channel view is open). Each frame we read
+  // scrollTop directly from the DOM and write transform / box-shadow via
+  // refs. This ticks at the display's refresh rate (120 Hz on M-series),
+  // not the JS scroll-event rate (which is much lower and irregular —
+  // that's what made the previous version look "choppy" even while the
+  // container itself scrolled smoothly). We early-out when scrollTop
+  // hasn't changed since the last frame so the loop is essentially free
+  // when the user isn't scrolling.
+  const bannerImgRef = useRef<HTMLImageElement>(null)
+  const topBarRef    = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    let rafId: number | null = null
+    let lastY = -1
+
+    const tick = () => {
+      const scroller = scrollRef.current
+      if (scroller) {
+        const y = scroller.scrollTop
+        if (y !== lastY) {
+          lastY = y
+          const img = bannerImgRef.current
+          if (img) {
+            // 0.5× parallax — img drifts up at half scroll speed.
+            const clamped = Math.min(y, BANNER_HEIGHT)
+            img.style.transform = `translate3d(0, ${clamped * 0.5}px, 0)`
+          }
+          const topBar = topBarRef.current
+          if (topBar) {
+            // Fade the shadow in over the last 100 px before the banner
+            // is fully scrolled past.
+            const shadowStart = BANNER_HEIGHT - 100
+            const t = Math.max(0, Math.min(1, (y - shadowStart) / 100))
+            topBar.style.boxShadow = t > 0
+              ? `0 6px 22px rgba(0,0,0,${0.35 * t})`
+              : 'none'
+          }
+        }
+      }
+      rafId = requestAnimationFrame(tick)
+    }
+    rafId = requestAnimationFrame(tick)
+    return () => {
+      if (rafId !== null) cancelAnimationFrame(rafId)
+    }
+  }, [])
 
   // Reset to first page whenever the channel changes or search changes
   useEffect(() => { setCurrentPage(0) }, [nav.channelId, searchQuery])
 
   // Scroll content area back to top on every page change and on channel
-  // change. With CSS scroll-driven animations, scrollTo(0) is enough —
-  // the animations rewind automatically because they're tied to the
-  // scroll position, not to a JS-tracked progress value.
+  // change — the rAF loop will pick up the new scrollTop on the next
+  // frame and reset transform/shadow to their baselines automatically.
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: 0, behavior: 'instant' })
   }, [currentPage, nav.channelId])
@@ -330,7 +371,7 @@ export default function Channel() {
           overflow: 'hidden',
         }}>
           <img
-            className="lt-banner-parallax"
+            ref={bannerImgRef}
             src={channel.bannerPath}
             alt=""
             style={{
@@ -340,6 +381,8 @@ export default function Channel() {
               height: BANNER_HEIGHT,
               objectFit: 'cover',
               filter: 'brightness(0.7) saturate(1.1)',
+              transform: 'translate3d(0, 0, 0)',
+              willChange: 'transform',
             }}
             onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
           />
@@ -353,8 +396,8 @@ export default function Channel() {
       ) : null}
 
       {/* Sticky top bar — latches to viewport top as banner scrolls past.
-          Elevation shadow fades in via CSS scroll-driven animation. */}
-      <div className="lt-topbar-elevate" style={{
+          Elevation shadow fades in via the rAF loop. */}
+      <div ref={topBarRef} style={{
         position: 'sticky',
         top: 0,
         zIndex: 3,
@@ -367,6 +410,7 @@ export default function Channel() {
         backdropFilter: 'blur(28px) saturate(200%)',
         WebkitBackdropFilter: 'blur(28px) saturate(200%)',
         borderBottom: '0.5px solid rgba(255,255,255,0.1)',
+        boxShadow: 'none',
         gap: 12,
       }}>
         {/* Back button */}

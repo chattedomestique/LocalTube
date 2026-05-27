@@ -4,6 +4,16 @@ Pre-implementation planning document. Captures intent, mental model,
 data schema, bridge protocol, UI design, edge cases, phasing, and
 **open questions** that need to be answered before code is written.
 
+> **Permission model (clarified)**: playlists are **curated by adults
+> only**. Editor mode is the only place to add/remove/reorder/clear or
+> create/rename/delete playlists. Viewer mode is **read-only
+> consumption** — kids see their playlists, choose which one to play,
+> tap items to play them, and watch them auto-advance. They cannot
+> modify contents.
+>
+> This is the single most important constraint and shapes every UI
+> decision below.
+
 ---
 
 ## 1. Mental Model
@@ -129,56 +139,72 @@ All commands emit the matching diff event for React to apply.
 
 ## 4. UI
 
-### 4.1 Add-to-card affordance
-- New icon button in the **top-right corner** of every ready video card
-- Default: small "+" inside a circular glass background, visible only on
-  card hover (mirrors the heart icon's behaviour, but mirrored to the
-  opposite corner)
-- **Single click** → add to the active playlist + show a small toast
-  ("Added to Up Next")
-- **Click the chevron** (next to the +) → opens a "Add to…" menu:
-  - list of profile's playlists, each clickable
-  - "+ New playlist" at the bottom
+The UI split is now driven entirely by the permission model:
+**curate in editor mode, consume in viewer mode**.
 
-Heart sits top-left, add-to-queue sits top-right — symmetric, never
-overlap.
+### 4.1 Editor mode — quick add from a video card
+- "+ Add to playlist" icon in the **top-right corner** of every ready
+  video card (matches the favorite heart top-left; symmetric corners)
+- **Visible only in editor mode** (no add button for kids — they can't
+  add to their own queue)
+- **Click** opens a compact popover:
+  1. **Target profile** — small avatar row of all profiles. Pick one.
+     Last-used profile is remembered and pre-selected.
+  2. **Target playlist** — list of that profile's playlists (including
+     their default Up Next). Pick one.
+  3. "+ New playlist" at the bottom of the playlist list
+- After the add, a toast confirms ("Added to Sarah's Up Next")
 
-### 4.2 Queue tray (slide-out from right)
+### 4.2 Editor mode — Playlists tab (full management surface)
+A new fourth tab in `EditorShell` next to Channels / Profiles /
+Settings. Layout matches the Profiles tab so it feels familiar:
+- **Left sidebar**: profile list (same as Profiles tab). Click a
+  profile to view their playlists.
+- **Middle column**: the selected profile's playlists — sortable list,
+  rename inline, delete, "+ New playlist", set-active toggle.
+- **Right column**: the selected playlist's videos — drag to reorder,
+  remove individual videos, clear playlist with confirm, per-profile
+  auto-playback mode selector at the top.
+
+This is where parents do the bulk of curation. The card popover (4.1)
+is the quick-add path for when they're browsing a channel.
+
+### 4.3 Viewer mode — tray (consume only, read-only)
+A slide-out tray on the right side, **available to kids but read-
+only**. They use it to play through their curated content.
 - Width: 360px, full-height
-- Toggle: persistent icon top-right of the app top bar; badge shows
-  count when > 0
-- Animation: slide in/out (transform: translateX), 240ms ease-out
-- Backdrop: optional dim overlay that closes on click (mobile-style),
-  configurable — start without it so the tray feels like a side panel
-  not a modal
+- Toggle: persistent icon top-right of the app top bar, with a count
+  badge when > 0
+- Animation: transform: translateX, 240ms ease-out
+- No backdrop (feels like a side panel, not a modal)
 
-Tray structure (top to bottom):
-1. **Header** — `Up Next` (or active playlist name) with a dropdown
-   chevron. Clicking opens the playlist picker
-2. **Playlist switcher** (expandable) — list of playlists with
-   active highlight; "+ New playlist" at the bottom
-3. **Body** — scrollable list of videos
-   - Thumbnail (small), title (line-clamp 2), duration
-   - Now-playing indicator on the active item
-   - Drag handle on the left for reordering
-   - Trash icon on the right to remove
-4. **Footer** — "Clear queue" button (destructive style, opens
-   confirmation modal)
+Tray contents in viewer mode:
+1. **Header** — active playlist name; chevron opens a switcher
+   listing this profile's playlists. Tapping a playlist makes it
+   active (changes what plays next). No "+ New playlist", no rename,
+   no delete.
+2. **Body** — scrollable list of videos. Thumbnail + title + duration.
+   Now-playing indicator on the current item. **Tap a video** to jump
+   to it. **No drag handles, no remove buttons, no clear button.**
+3. **Empty state** — friendly message ("Your queue is empty. Ask a
+   grown-up to add some videos!"). No add-to-queue affordance.
 
-### 4.3 Auto-playback options
-- Lives in the **player overlay** controls, behind a gear-style menu
-  (next to the loop button we already have)
-- Four mutually-exclusive options:
+### 4.4 Auto-playback options (parent setting, takes effect in viewer)
+- **Configured by parents** in the Editor > Playlists tab, on each
+  profile (alongside their playlists)
+- Four mutually-exclusive options for what happens at end-of-video
+  during **channel-initiated** playback (not queue playback):
   - ⟳ Repeat — replay this video
   - ⇉ Sequential — next video in the channel
   - ⤮ Random — random video from this channel
   - ⤴ Exit — return to channel view (current default)
-- Per-profile, persisted via `setAutoPlaybackMode`
+- Stored on `profiles.auto_playback_mode`; applied during the viewer
+  session
 
-Note: when playing from a **queue**, auto-playback mode is ignored —
-the queue's next item plays. Only applies to channel-initiated playback.
+When playing from a **queue**, auto-playback mode is ignored — the
+queue's next item plays. Only applies to channel-initiated playback.
 
-### 4.4 Drag-to-reorder
+### 4.5 Drag-to-reorder (editor mode only)
 - HTML5 drag-and-drop API; `draggable="true"` on each row
 - Visible drop indicator (a thin accent line between rows)
 - On drop, dispatch `reorderPlaylist` with the full new order
@@ -216,17 +242,20 @@ playlist's current video pointer.
 | User switches profile mid-playback | Stop playback. Active playlist is per-profile, so new profile sees their own playlist |
 | Duplicate video added | Allowed; appears twice in the list |
 | Queue with 1 video, that video ends | Stops; exits player (queue exhausted) |
-| Adding to playlist while no profile active (editor mode) | The "+ Add to queue" button on a card is HIDDEN in editor mode (it's a viewer-mode interaction, like the favorites heart) |
+| Adding to playlist in viewer mode | The "+ Add to playlist" button on cards is HIDDEN in viewer mode (kids can't add to their own queue). It only appears in editor mode. |
+| Editor mode adds requiring profile context | The card popover (4.1) forces an explicit profile + playlist pick before adding |
+| Kid switches active playlist mid-watch | Allowed — current playback continues, but the next end-of-video advances inside the newly-active playlist if queue-sourced |
 | Renaming a playlist mid-edit while another tab/window is open | Last-write-wins; bridge event re-syncs everyone |
 
 ---
 
 ## 7. Phasing
 
-To avoid a 3000-line PR, ship in slices that each leave the app working:
+To avoid a 3000-line PR, ship in slices that each leave the app working.
 
-### Phase 1 — Schema + Up Next + Add-to-queue + Tray *(MVP)*
-- Migration 8 (tables + auto-create Up Next per profile)
+### Phase 1 — Schema + Up Next + viewer-mode read-only tray *(MVP)*
+- Migration 8 (tables + auto-create Up Next per profile, including
+  retroactively for existing profiles)
 - DatabaseService CRUD
 - LibraryStore.playlists + .playlistVideos
 - AppState forwarders
@@ -234,34 +263,53 @@ To avoid a 3000-line PR, ship in slices that each leave the app working:
   `removeFromPlaylist`, `clearPlaylist`, `reorderPlaylist`,
   `setActivePlaylist`
 - React store reducer cases
-- Tray component (single-playlist view; no switcher yet)
-- "+ Add to queue" icon on VideoCard
+- **Read-only tray in viewer mode** (slide-out, shows active playlist
+  contents, no edit affordances)
 - Tray toggle in top bar
+- (Editor side stubbed — playlists exist but can't be edited yet)
 
-**At this point: kids can build a queue and reorder it. No named
-playlists yet, no auto-advance yet.**
+**At this point**: viewer mode shows an empty Up Next tray with a
+"ask a grown-up to add videos" empty state. Foundation is in place.
 
-### Phase 2 — Auto-advance player
-- PlayerState gains `playSource`
-- Tray item click → play (advance pointer)
-- On end-of-video while in queue mode → next queue item
-- Tray "now playing" highlight
+### Phase 2 — Editor-mode quick add from cards
+- "+ Add to playlist" icon on video cards (editor mode only)
+- Card popover: profile picker → playlist picker → toast confirm
+- Last-used target remembered per session
+- Parents can now populate any profile's Up Next from a channel page
 
-### Phase 3 — Multiple named playlists
-- Playlist switcher in tray header
-- Create / rename / delete UI
-- Add-to-card chevron menu ("Add to…")
+**At this point**: parents can add videos; kids can see them in the
+tray and tap to play. No auto-advance yet, no named playlists, no
+reordering.
 
-### Phase 4 — Auto-playback modes
-- `auto_playback_mode` column wired up
-- Player gear menu with 4 mode options
-- On end-of-video in `ChannelPlay` mode → apply chosen behaviour
+### Phase 3 — Editor > Playlists tab
+- New fourth tab in `EditorShell` (Channels | Profiles | Settings →
+  + Playlists)
+- Three-column layout: profile sidebar → playlists list → videos in
+  selected playlist
+- Create / rename / delete playlists (not the system Up Next)
+- Reorder videos in a playlist (drag in editor)
+- Remove videos, clear playlist with confirm
+- Auto-playback mode selector at the top of each profile's section
+
+**At this point**: parents have full curation. Kids still consume.
+
+### Phase 4 — Auto-advance player
+- PlayerState gains `playSource: ChannelPlay | QueuePlay`
+- Tray item tap (viewer) → play, set playSource = QueuePlay
+- On end-of-video while in QueuePlay → advance to next in playlist
+- On end-of-video while in ChannelPlay → apply
+  `profile.auto_playback_mode`
+- Now-playing indicator in tray follows current item
+
+**At this point**: the actual playback flow works end-to-end.
 
 ### Phase 5 — Polish
-- Empty states (empty playlist, no playlists)
-- Toast notifications on add-to-queue
-- "Just added" highlight animation
-- Keyboard shortcuts (Cmd+Q to toggle tray, ↑/↓ to reorder selected)
+- Switching active playlist in viewer (chevron in tray header)
+- Empty states (empty playlist, no playlists yet for profile)
+- Toast notifications on add-to-playlist (editor)
+- "Just added" highlight animation on the targeted playlist
+- Keyboard shortcuts (Cmd+Q to toggle tray)
+- `MountWithExit` on the tray for smooth slide-out
 
 ---
 
@@ -328,27 +376,25 @@ Before shipping Phase 1, manually run through:
 
 ## 11. Open questions for you
 
-These materially change implementation. I'd rather decide them with you
-than assume.
+Reduced list — the permission-model clarification answered some of the
+prior questions.
 
 1. **"Up Next" naming** — happy with that, or do you want "My Queue" /
    "Now Playing" / something else?
-2. **Tray toggle location** — top-right of the library/channel top bar
-   feels right to me. Always visible, with a count badge. Acceptable?
-3. **Editor mode**: do parents ever need to create/edit a playlist
-   directly for a kid's profile, or is "switch to the kid's profile to
-   curate" sufficient? I'd default to the latter — much simpler — but
-   if you envision parents pre-loading "Bedtime" for the kids that's
-   different.
-4. **Adding to a specific (non-active) playlist** — chevron-menu on the
-   card seems right but it's another bit of complexity on a small card.
-   Alternative: only add-to-active from cards, manage everything else
-   from the tray. Less powerful but cleaner. **Preference?**
-5. **Drag-to-reorder fidelity** — HTML5 DnD is fine for v1; if you
-   want pixel-perfect reorder UX from day one, I should reach for a
-   small library (`@dnd-kit/sortable` is the modern standard, ~30kb).
-   The bundle is already 490kB so a 30kB addition isn't crazy.
-6. **When the queue runs out** — exit the player (my default), or loop
-   the queue, or replay the last item?
-7. **Should the tray remember its open/closed state across app
-   launches**, or always start closed?
+2. **Tray toggle location** — top-right of the library/channel top bar,
+   always visible, with a count badge. Acceptable?
+3. **Can kids switch active playlist in viewer mode?** I'd say yes
+   (chevron in tray header opens a profile-scoped picker — read-only,
+   no editing). Confirm?
+4. **Drag-to-reorder fidelity** (editor side only now) — HTML5 DnD vs
+   `@dnd-kit/sortable` (~30kB)? HTML5 DnD is fine to start; reach for
+   the library if it feels bad.
+5. **Queue exhausted in viewer playback** — exit the player (my
+   default), loop the queue, or replay the last item?
+6. **Tray open/closed state across launches** — persist or always
+   start closed? My instinct: always start closed in viewer mode (kids
+   don't need it always-open); editor mode could remember.
+7. **Quick-add icon on cards in editor mode** — confirm the icon-only
+   approach (popover on click). Alternative: dragging a video to the
+   tray could add it, if the tray is open. More fancy. Probably
+   overkill for v1.

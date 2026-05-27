@@ -42,8 +42,11 @@ final class AppState {
     // MARK: - Mode
 
     var appMode: AppMode = .viewer
-    private var editorLockTimer: Timer?
-    private(set) var editorRemainingSeconds: Int = 0
+    // editorRemainingSeconds remains as a computed always-zero so any
+    // stale bridge payload reader still sees a sane value during the
+    // migration. The auto-lock timer was removed in the editing-model
+    // redesign — parents now have to explicitly Exit Admin / Exit Edit.
+    var editorRemainingSeconds: Int { 0 }
 
     // MARK: - Onboarding / Gates
 
@@ -183,7 +186,16 @@ final class AppState {
         await library.persist(context, op)
     }
 
-    // MARK: - Editor Mode
+    // MARK: - Admin Mode (formerly "Editor Mode")
+    //
+    // Internal names (requestEditorMode, enterEditorMode, exitEditorMode,
+    // AppMode.editor) are kept to limit churn — they're not user-visible.
+    // The user-facing label is "Admin" throughout the UI.
+    //
+    // The auto-lock timer was removed. Admin mode now stays open until
+    // the parent explicitly clicks "Exit Admin". This matches the new
+    // editing-model design (EDITING_MODEL.md) where editing is a
+    // deliberate context the parent enters and leaves on purpose.
 
     func requestEditorMode() {
         showPINEntry = true
@@ -192,35 +204,13 @@ final class AppState {
     func enterEditorMode() {
         appMode = .editor
         showPINEntry = false
-        resetEditorLockTimer()
-        AppLogger.info("Editor Mode entered")
+        AppLogger.info("Admin mode entered")
     }
 
     func exitEditorMode() {
         appMode = .viewer
         showPINEntry = false
-        editorLockTimer?.invalidate()
-        editorLockTimer = nil
-        editorRemainingSeconds = 0
-        AppLogger.info("Editor Mode exited")
-    }
-
-    func resetEditorLockTimer() {
-        editorLockTimer?.invalidate()
-        let minutes = settings.editorAutoLockMinutes
-        editorRemainingSeconds = minutes * 60
-
-        editorLockTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                guard let self = self else { return }
-                self.editorRemainingSeconds -= 1
-                self.onEditorTimerTick?(self.editorRemainingSeconds)
-                if self.editorRemainingSeconds <= 0 {
-                    AppLogger.info("Editor Mode auto-locked due to inactivity")
-                    self.exitEditorMode()
-                }
-            }
-        }
+        AppLogger.info("Admin mode exited")
     }
 
     // MARK: - Channel Sync

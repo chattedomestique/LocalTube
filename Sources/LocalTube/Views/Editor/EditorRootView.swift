@@ -34,7 +34,8 @@ struct EditorRootView: View {
         .onReceive(NotificationCenter.default.publisher(for: .newChannelRequested)) { _ in
             showNewChannel = true
         }
-        .onTapGesture { appState.resetEditorLockTimer() }
+        // Auto-lock removed.
+        .onTapGesture { }
         .alert("Delete Channel?", isPresented: $showDeleteChannelAlert, presenting: channelToDelete) { ch in
             Button("Delete", role: .destructive) { appState.removeChannel(id: ch.id) }
             Button("Cancel", role: .cancel) {}
@@ -52,7 +53,6 @@ struct EditorRootView: View {
                 get: { appState.editorSelectedChannelId },
                 set: {
                     appState.editorSelectedChannelId = $0
-                    appState.resetEditorLockTimer()
                 }
             )) {
                 if appState.channels.isEmpty {

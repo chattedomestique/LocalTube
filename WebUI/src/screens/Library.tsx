@@ -150,7 +150,7 @@ export default function Library() {
             <TopBarButton
               kind="secondary"
               onClick={handleEditorToggle}
-              label="Editor"
+              label="Admin"
               icon={(
                 <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                   <path d="M10 1.5L12.5 4L4.5 12H2V9.5L10 1.5Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" fill="none" />

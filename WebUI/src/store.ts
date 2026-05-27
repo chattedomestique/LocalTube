@@ -27,7 +27,6 @@ const defaultState: AppState = {
     ffmpeg: false,
   },
   activeDownload: undefined,
-  editorRemainingSeconds: 0,
   syncingChannelIds: [],
   profiles: [],
   profileChannels: {},
@@ -181,9 +180,7 @@ function applyBridgeEvent(app: AppState, event: BridgeEvent): AppState {
       }
       return { ...app, videos }
     }
-    case 'editorTimerTick': {
-      return { ...app, editorRemainingSeconds: event.payload.remainingSeconds }
-    }
+    // editorTimerTick removed with the auto-lock timer.
     // ── Targeted diff events ──────────────────────────────────────────────
     case 'channelUpserted': {
       const { channel } = event.payload
@@ -224,7 +221,6 @@ function applyBridgeEvent(app: AppState, event: BridgeEvent): AppState {
       return {
         ...app,
         appMode: event.payload.appMode,
-        editorRemainingSeconds: event.payload.editorRemainingSeconds,
       }
     }
     // ── Profile events ────────────────────────────────────────────────────

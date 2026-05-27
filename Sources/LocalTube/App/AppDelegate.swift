@@ -200,9 +200,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
-        // Wire editor timer tick → bridge emitter
-        appState.onEditorTimerTick = { [weak self] remaining in
-            self?.windowController.bridge.emitter.emitEditorTimerTick(remainingSeconds: remaining)
-        }
+        // Editor timer was removed — admin mode stays open until the
+        // parent explicitly exits. See EDITING_MODEL.md.
     }
 }

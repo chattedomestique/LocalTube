@@ -185,10 +185,7 @@ final class LocalTubeBridge: NSObject, WKScriptMessageHandler {
     private func handleExitEditorMode() {
         guard let appState else { return }
         appState.exitEditorMode()
-        emitter.emitAppModeChanged(
-            mode: appState.appMode,
-            editorRemainingSeconds: appState.editorRemainingSeconds
-        )
+        emitter.emitAppModeChanged(mode: appState.appMode)
     }
 
     // MARK: - Channel CRUD

@@ -3,16 +3,16 @@ import { useAppStore } from '../store'
 import type { NavScreen } from '../types'
 
 /**
- * Single unified shell for ALL editor-mode surfaces. Replaces the
- * previous tangle where Editor, Profiles, and Settings each had their
- * own top bar + back-to-library button, and where the Library top bar
- * tried to double as an editor entry point with a redundant "Manage"
- * button.
+ * Single unified shell for ALL admin-mode surfaces. ("Editor" was the
+ * old name — kept as the internal filename / component name / appMode
+ * enum value, but the UI label is now "Admin" per the editing-model
+ * redesign in EDITING_MODEL.md.)
  *
  * Navigation model:
  *   - Three sibling tabs: Channels | Profiles | Settings
  *   - Click a tab → navigateTo({ screen: tab })
- *   - "Exit Editor" returns to viewer mode (auto-navigates to library)
+ *   - "Exit Admin" returns to viewer mode (auto-navigates to library)
+ *   - No auto-lock timer — parents stay in admin until they hit Exit.
  *
  * The Editor/Profiles/Settings screens render here as pure content —
  * they no longer ship their own top bars.
@@ -53,13 +53,6 @@ const TABS: { id: EditorTab; label: string; icon: ReactNode }[] = [
   },
 ]
 
-function formatTimer(seconds: number): string {
-  if (seconds <= 0) return '0:00'
-  const m = Math.floor(seconds / 60)
-  const s = seconds % 60
-  return `${m}:${s.toString().padStart(2, '0')}`
-}
-
 export default function EditorShell({
   activeTab,
   children,
@@ -68,14 +61,12 @@ export default function EditorShell({
   children: ReactNode
 }) {
   const { state, navigateTo, send } = useAppStore()
-  const { editorRemainingSeconds, activeDownload } = state
+  const { activeDownload } = state
 
   const handleExit = () => {
     send({ type: 'exitEditorMode' })
     // The mode flip is auto-navigated to library by AppContent's effect.
   }
-
-  const isUrgent = editorRemainingSeconds > 0 && editorRemainingSeconds <= 60
 
   return (
     <div style={{
@@ -114,13 +105,13 @@ export default function EditorShell({
             </svg>
           </div>
           <span style={{ fontSize: 14, fontWeight: 700, letterSpacing: '-0.01em', color: 'var(--accent)' }}>
-            Editor
+            Admin
           </span>
         </div>
 
         <div style={{ width: 1, height: 18, background: 'var(--border)' }} />
 
-        {/* Tabs — the canonical navigation between editor sub-surfaces */}
+        {/* Tabs — the canonical navigation between admin sub-surfaces */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           {TABS.map(t => (
             <TabPill
@@ -157,35 +148,8 @@ export default function EditorShell({
 
         <div style={{ flex: 1 }} />
 
-        {/* Auto-lock countdown */}
-        {editorRemainingSeconds > 0 && (
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-            padding: '5px 10px',
-            borderRadius: 8,
-            background: isUrgent ? 'rgba(248,113,113,0.10)' : 'var(--surface-el)',
-            border: `1px solid ${isUrgent ? 'rgba(248,113,113,0.30)' : 'var(--border)'}`,
-            transition: 'background 200ms ease, border-color 200ms ease',
-          }}>
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-              <circle cx="6" cy="6.5" r="4.5" stroke={isUrgent ? '#f87171' : 'var(--text-tertiary)'} strokeWidth="1.3" fill="none" />
-              <path d="M6 4V6.5L7.5 8" stroke={isUrgent ? '#f87171' : 'var(--text-tertiary)'} strokeWidth="1.3" strokeLinecap="round" />
-              <path d="M4.5 1.5H7.5" stroke={isUrgent ? '#f87171' : 'var(--text-tertiary)'} strokeWidth="1.3" strokeLinecap="round" />
-            </svg>
-            <span style={{
-              fontSize: 12,
-              fontWeight: 600,
-              fontFamily: 'ui-monospace, monospace',
-              color: isUrgent ? 'var(--destructive)' : 'var(--text-secondary)',
-            }}>
-              {formatTimer(editorRemainingSeconds)}
-            </span>
-          </div>
-        )}
-
-        {/* Exit Editor — the only way out, always visible */}
+        {/* Exit Admin — the only way out, always visible. No more
+            auto-lock timer; admin stays open until the parent leaves. */}
         <ExitButton onClick={handleExit} />
       </div>
 
@@ -255,7 +219,7 @@ function ExitButton({ onClick }: { onClick: () => void }) {
       onClick={onClick}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      title="Exit Editor"
+      title="Exit Admin"
       style={{
         display: 'flex',
         alignItems: 'center',
@@ -277,7 +241,7 @@ function ExitButton({ onClick }: { onClick: () => void }) {
         <path d="M8 1.5H12V12.5H8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
         <path d="M9 7H2M2 7L4 5M2 7L4 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
-      Exit Editor
+      Exit Admin
     </button>
   )
 }

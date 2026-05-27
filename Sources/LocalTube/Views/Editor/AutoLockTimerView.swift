@@ -8,7 +8,9 @@ struct AutoLockTimerView: View {
     private var isCritical: Bool { remaining <= 10 }
 
     var body: some View {
-        Button(action: { appState.resetEditorLockTimer() }) {
+        // Auto-lock removed. This dead SwiftUI view is preserved for now;
+        // tapping the button is a no-op.
+        Button(action: { }) {
             HStack(spacing: 8) {
                 Image(systemName: "lock.open.fill")
                     .font(.system(size: 16))

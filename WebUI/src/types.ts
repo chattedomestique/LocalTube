@@ -77,7 +77,9 @@ export interface AppState {
     progress: number
     title: string
   }
-  editorRemainingSeconds: number
+  // editorRemainingSeconds removed with the auto-lock timer in the
+  // editing-model redesign. Kept on the wire payload as a constant 0
+  // for transitional safety; not exposed in the React state shape.
   syncingChannelIds: string[]
   profiles: Profile[]
   /** profileId → list of channel ids assigned to that profile */
@@ -96,7 +98,7 @@ export type BridgeEvent =
   | { type: 'downloadError';     payload: { videoId: string; error: string } }
   | { type: 'folderSelected';    payload: { path: string } }
   | { type: 'pinValidated';      payload: { valid: boolean } }
-  | { type: 'editorTimerTick';   payload: { remainingSeconds: number } }
+  // editorTimerTick removed with the auto-lock timer.
   | { type: 'navigateTo';        payload: NavState }
   // Targeted diff events — emitted instead of full stateUpdate when only
   // a single slice changed. The React reducer applies them as O(1) patches.
@@ -105,7 +107,7 @@ export type BridgeEvent =
   | { type: 'videosUpserted';    payload: { channelId: string; videos: Video[] } }
   | { type: 'videoRemoved';      payload: { videoId: string } }
   | { type: 'settingsUpdated';   payload: { settings: AppSettings } }
-  | { type: 'appModeChanged';    payload: { appMode: AppMode; editorRemainingSeconds: number } }
+  | { type: 'appModeChanged';    payload: { appMode: AppMode } }
   // Profile diff events
   | { type: 'profileUpserted';   payload: { profile: Profile } }
   | { type: 'profileRemoved';    payload: { profileId: string } }

@@ -74,9 +74,7 @@ final class BridgeEventEmitter {
         emit("pinValidated", payload: ["valid": valid])
     }
 
-    func emitEditorTimerTick(remainingSeconds: Int) {
-        emit("editorTimerTick", payload: ["remainingSeconds": remainingSeconds])
-    }
+    // emitEditorTimerTick removed with the auto-lock timer.
 
     // MARK: - Targeted diff emitters
     //
@@ -107,10 +105,9 @@ final class BridgeEventEmitter {
         emit("settingsUpdated", payload: ["settings": settings.bridgePayload()])
     }
 
-    func emitAppModeChanged(mode: AppMode, editorRemainingSeconds: Int) {
+    func emitAppModeChanged(mode: AppMode) {
         emit("appModeChanged", payload: [
             "appMode": mode == .editor ? "editor" : "viewer",
-            "editorRemainingSeconds": editorRemainingSeconds,
         ])
     }
 

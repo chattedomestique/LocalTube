@@ -12,8 +12,6 @@ const QUALITY_OPTIONS = [
   { value: 'audio',    label: 'Audio Only' },
 ]
 
-const AUTO_LOCK_OPTIONS = [5, 10, 15, 30, 60]
-
 // M14 fix: Added htmlFor/id association for accessible labels.
 function SettingRow({
   label,
@@ -184,40 +182,6 @@ export default function Settings() {
           </div>
         </div>
 
-        {/* Editor section */}
-        <div>
-          <p className="lt-label" style={{ marginBottom: 10 }}>Editor</p>
-          <div style={{
-            background: 'linear-gradient(135deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.04) 100%)',
-            backgroundColor: 'rgba(20,20,25,0.7)',
-            backdropFilter: 'blur(20px) saturate(180%)',
-            WebkitBackdropFilter: 'blur(20px) saturate(180%)',
-            border: '0.5px solid rgba(255,255,255,0.12)',
-            borderRadius: 14,
-            overflow: 'hidden',
-            boxShadow: '0 4px 16px rgba(0,0,0,0.35), 0 1px 4px rgba(0,0,0,0.2), inset 0 0 0 1px rgba(255,255,255,0.06)',
-          }}>
-            <SettingRow
-              label="Auto-Lock Editor After"
-              description="Automatically lock editor mode after inactivity"
-              htmlFor="setting-autolock"
-            >
-              <select
-                id="setting-autolock"
-                className="lt-input"
-                value={local.editorAutoLockMinutes}
-                onChange={e => setLocal(prev => ({ ...prev, editorAutoLockMinutes: Number(e.target.value) }))}
-                style={{ width: 160, padding: '7px 32px 7px 12px' }}
-              >
-                {AUTO_LOCK_OPTIONS.map(n => (
-                  <option key={n} value={n}>
-                    {n < 60 ? `${n} minutes` : '1 hour'}
-                  </option>
-                ))}
-              </select>
-            </SettingRow>
-          </div>
-        </div>
 
         {/* Dependencies section */}
         <div>

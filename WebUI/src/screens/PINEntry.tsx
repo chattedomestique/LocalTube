@@ -103,9 +103,9 @@ export default function PINEntry() {
 
         {/* Title */}
         <div style={{ textAlign: 'center', marginTop: -8 }}>
-          <h2 style={{ fontSize: 20, marginBottom: 6 }}>Enter Editor PIN</h2>
+          <h2 style={{ fontSize: 20, marginBottom: 6 }}>Enter Admin PIN</h2>
           <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-            Enter your 4-digit PIN to unlock editor mode.
+            Enter your 4-digit PIN to unlock admin mode.
           </p>
         </div>
 

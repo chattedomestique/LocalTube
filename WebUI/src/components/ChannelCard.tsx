@@ -7,6 +7,11 @@ interface Props {
   isDownloading?: boolean
   downloadProgress?: number
   onClick: () => void
+  /** True when the parent is in the inline edit layer for this profile.
+      Adds drag handle + remove-from-profile button; click is a no-op. */
+  isEditing?: boolean
+  /** Called when the parent clicks the × button while editing. */
+  onRemoveFromProfile?: () => void
 }
 
 // "New" = a video became ready within the last NEW_VIDEO_WINDOW_MS. Stays
@@ -14,7 +19,10 @@ interface Props {
 // doesn't linger forever on every channel.
 const NEW_VIDEO_WINDOW_MS = 1000 * 60 * 60 * 24 * 3
 
-export default function ChannelCard({ channel, videos, isDownloading, downloadProgress, onClick }: Props) {
+export default function ChannelCard({
+  channel, videos, isDownloading, downloadProgress, onClick,
+  isEditing, onRemoveFromProfile,
+}: Props) {
   const readyVideos = videos.filter(v => v.downloadState === 'ready')
 
   // Image priority for the card:
@@ -37,12 +45,12 @@ export default function ChannelCard({ channel, videos, isDownloading, downloadPr
   return (
     <div
       className="lt-card"
-      onClick={onClick}
+      onClick={isEditing ? undefined : onClick}
       style={{
         aspectRatio: '16/9',
         position: 'relative',
         overflow: 'hidden',
-        cursor: 'pointer',
+        cursor: isEditing ? 'grab' : 'pointer',
         borderRadius: 22,
         userSelect: 'none',
         WebkitUserSelect: 'none',
@@ -110,6 +118,92 @@ export default function ChannelCard({ channel, videos, isDownloading, downloadPr
         background: 'transparent',
         pointerEvents: 'none',
       }} className="card-glow-border" />
+
+      {/* Edit-layer affordances — drag handle (centered) + remove-from-
+          profile × (top-right). Both appear only while the parent is in
+          edit layer. Drag is wired at the grid level (parent handles
+          dragstart/over/drop); this is just the visual handle. */}
+      {isEditing && (
+        <>
+          {/* Drag handle — full-card subtle overlay so the whole card
+              feels grabbable, plus an icon hint top-left. */}
+          <div style={{
+            position: 'absolute',
+            inset: 0,
+            background: 'rgba(0,0,0,0.18)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 2,
+            pointerEvents: 'none',
+          }}>
+            <div style={{
+              padding: '10px 14px',
+              borderRadius: 99,
+              background: 'rgba(0,0,0,0.55)',
+              backdropFilter: 'blur(16px) saturate(180%)',
+              WebkitBackdropFilter: 'blur(16px) saturate(180%)',
+              border: '1px solid rgba(255,255,255,0.2)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              color: 'white',
+              fontSize: 13,
+              fontWeight: 600,
+            }}>
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <circle cx="4" cy="3" r="1" fill="currentColor" />
+                <circle cx="10" cy="3" r="1" fill="currentColor" />
+                <circle cx="4" cy="7" r="1" fill="currentColor" />
+                <circle cx="10" cy="7" r="1" fill="currentColor" />
+                <circle cx="4" cy="11" r="1" fill="currentColor" />
+                <circle cx="10" cy="11" r="1" fill="currentColor" />
+              </svg>
+              Drag to reorder
+            </div>
+          </div>
+          {/* Remove-from-profile × button — top-right, above all overlays */}
+          {onRemoveFromProfile && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onRemoveFromProfile() }}
+              title="Remove from this profile"
+              aria-label="Remove channel from profile"
+              style={{
+                position: 'absolute',
+                top: 12,
+                right: 12,
+                zIndex: 3,
+                width: 32,
+                height: 32,
+                borderRadius: '50%',
+                background: 'rgba(248,113,113,0.88)',
+                border: '1px solid rgba(255,255,255,0.35)',
+                color: 'white',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: 0,
+                boxShadow: '0 4px 12px rgba(0,0,0,0.45)',
+                transition: 'transform 160ms cubic-bezier(0.25,1,0.5,1), background 160ms ease',
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.transform = 'scale(1.10)'
+                e.currentTarget.style.background = 'rgba(248,113,113,1)'
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.transform = 'scale(1)'
+                e.currentTarget.style.background = 'rgba(248,113,113,0.88)'
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <path d="M3 3L11 11M11 3L3 11" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+              </svg>
+            </button>
+          )}
+        </>
+      )}
 
       {/* "New video" badge — soft glowing dot in the top-left corner
           when a video became ready in the last few days. Designed to

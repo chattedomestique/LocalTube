@@ -81,6 +81,10 @@ export interface AppState {
   // editing-model redesign. Kept on the wire payload as a constant 0
   // for transitional safety; not exposed in the React state shape.
   syncingChannelIds: string[]
+  /** Inline edit layer flag (separate from Admin mode). When true,
+      the active profile's pages show edit affordances and block
+      navigation into deeper layers. */
+  isEditing: boolean
   profiles: Profile[]
   /** profileId → list of channel ids assigned to that profile */
   profileChannels: Record<string, string[]>
@@ -114,6 +118,7 @@ export type BridgeEvent =
   | { type: 'profileChannelsUpdated'; payload: { profileId: string; channelIds: string[] } }
   | { type: 'activeProfileChanged';   payload: { activeProfileId: string | null } }
   | { type: 'favoriteChanged';        payload: { profileId: string; videoId: string; isFavorite: boolean } }
+  | { type: 'isEditingChanged';       payload: { isEditing: boolean } }
 
 // ─── Bridge Messages (JS → Swift) ─────────────────────────────────────────
 export type BridgeMessage =
@@ -142,6 +147,8 @@ export type BridgeMessage =
   | { type: 'setProfileChannels';  payload: { profileId: string; channelIds: string[] } }
   | { type: 'dismissPINEntry' }
   | { type: 'toggleFavorite';      payload: { profileId: string; videoId: string; isFavorite: boolean } }
+  | { type: 'requestEditMode' }
+  | { type: 'endEditMode' }
 
 // ─── Navigation ────────────────────────────────────────────────────────────
 export type NavScreen = 'library' | 'channel' | 'settings' | 'editor' | 'profiles'

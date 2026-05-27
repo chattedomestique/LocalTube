@@ -28,6 +28,7 @@ const defaultState: AppState = {
   },
   activeDownload: undefined,
   syncingChannelIds: [],
+  isEditing: false,
   profiles: [],
   profileChannels: {},
   profileFavorites: {},
@@ -256,6 +257,9 @@ function applyBridgeEvent(app: AppState, event: BridgeEvent): AppState {
         ...app,
         activeProfileId: event.payload.activeProfileId ?? undefined,
       }
+    }
+    case 'isEditingChanged': {
+      return { ...app, isEditing: event.payload.isEditing }
     }
     case 'favoriteChanged': {
       const { profileId, videoId, isFavorite } = event.payload

@@ -134,6 +134,10 @@ final class BridgeEventEmitter {
         ])
     }
 
+    func emitIsEditingChanged(_ isEditing: Bool) {
+        emit("isEditingChanged", payload: ["isEditing": isEditing])
+    }
+
     func emitFavoriteChanged(profileId: UUID, videoId: UUID, isFavorite: Bool) {
         emit("favoriteChanged", payload: [
             "profileId":  profileId.uuidString,
@@ -157,6 +161,7 @@ extension AppState {
         var payload: [String: Any] = [
             "channels":  channels.map { $0.bridgePayload() },
             "appMode":   appMode == .editor ? "editor" : "viewer",
+            "isEditing": isEditing,
             "isOnboarding": isOnboarding,
             "needsPINSetup": needsPINSetup,
             "showPINEntry":  showPINEntry,

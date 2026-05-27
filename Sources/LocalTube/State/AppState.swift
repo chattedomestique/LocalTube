@@ -8,6 +8,13 @@ enum AppMode: Equatable {
     case editor
 }
 
+enum PendingPinAction: Sendable {
+    /// PIN unlocks the global Admin shell.
+    case admin
+    /// PIN unlocks the inline edit layer (sets `isEditing = true`).
+    case edit
+}
+
 // MARK: - Navigation Destination
 
 enum ViewerDestination: Hashable {
@@ -47,6 +54,18 @@ final class AppState {
     // migration. The auto-lock timer was removed in the editing-model
     // redesign — parents now have to explicitly Exit Admin / Exit Edit.
     var editorRemainingSeconds: Int { 0 }
+
+    /// Inline edit layer flag (separate from `.editor` admin mode).
+    /// When true, the active profile's Library/Channel page renders edit
+    /// affordances (drag handles, remove buttons) and blocks navigation
+    /// into deeper layers. Mutually exclusive with `.editor` admin mode —
+    /// entering one clears the other.
+    var isEditing: Bool = false
+
+    /// Tracks what to do after a successful PIN entry — admin (the
+    /// global editor) vs. edit (the inline edit layer). Defaults to
+    /// `.admin` for back-compat with the existing picker flow.
+    var pendingPinAction: PendingPinAction = .admin
 
     // MARK: - Onboarding / Gates
 
@@ -203,14 +222,33 @@ final class AppState {
 
     func enterEditorMode() {
         appMode = .editor
+        isEditing = false   // mutual exclusion
         showPINEntry = false
+        pendingPinAction = .admin
         AppLogger.info("Admin mode entered")
     }
 
     func exitEditorMode() {
         appMode = .viewer
+        isEditing = false
         showPINEntry = false
         AppLogger.info("Admin mode exited")
+    }
+
+    /// Enter the inline edit layer (per-profile, page-contextual). Always
+    /// keeps `appMode = .viewer` — edit layer overlays the viewer; it
+    /// doesn't replace it with the Admin shell.
+    func enterEditMode() {
+        appMode = .viewer
+        isEditing = true
+        showPINEntry = false
+        pendingPinAction = .admin
+        AppLogger.info("Edit layer entered")
+    }
+
+    func endEditMode() {
+        isEditing = false
+        AppLogger.info("Edit layer exited")
     }
 
     // MARK: - Channel Sync

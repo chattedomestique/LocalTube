@@ -67,6 +67,8 @@ final class LocalTubeBridge: NSObject, WKScriptMessageHandler {
         case .setProfileChannels:  handleSetProfileChannels(payloadDict)
         case .dismissPINEntry:     handleDismissPINEntry()
         case .toggleFavorite:      handleToggleFavorite(payloadDict)
+        case .requestEditMode:     handleRequestEditMode()
+        case .endEditMode:         handleEndEditMode()
         }
     }
 
@@ -149,7 +151,14 @@ final class LocalTubeBridge: NSObject, WKScriptMessageHandler {
             return
         }
         let valid = PINService.verify(pin)
-        if valid { appState?.enterEditorMode() }
+        if valid, let appState {
+            // Dispatch on the pending intent so the same PIN modal can
+            // unlock either Admin shell or the inline edit layer.
+            switch appState.pendingPinAction {
+            case .admin: appState.enterEditorMode()
+            case .edit:  appState.enterEditMode()
+            }
+        }
         emitter.emitPINValidated(valid: valid)
         if let appState { emitter.emitStateUpdate(appState) }
     }
@@ -177,9 +186,39 @@ final class LocalTubeBridge: NSObject, WKScriptMessageHandler {
 
     private func handleRequestEditorMode() {
         guard let appState else { return }
+        // Session continuation: if the parent is already in the edit
+        // layer (PIN'd in), promote straight to Admin without re-PIN.
+        if appState.isEditing {
+            appState.enterEditorMode()
+            emitter.emitIsEditingChanged(false)
+            emitter.emitAppModeChanged(mode: .editor)
+            return
+        }
+        appState.pendingPinAction = .admin
         appState.requestEditorMode()
-        // showPINEntry is a top-level flag — only it changed, send full state.
         emitter.emitStateUpdate(appState)
+    }
+
+    // Inline edit layer entry. Same PIN-session continuation: if the
+    // parent is already in Admin, drop them into edit layer (which
+    // implies viewer mode) without re-PIN.
+    private func handleRequestEditMode() {
+        guard let appState else { return }
+        if appState.appMode == .editor {
+            appState.enterEditMode()
+            emitter.emitAppModeChanged(mode: .viewer)
+            emitter.emitIsEditingChanged(true)
+            return
+        }
+        appState.pendingPinAction = .edit
+        appState.showPINEntry = true
+        emitter.emitStateUpdate(appState)
+    }
+
+    private func handleEndEditMode() {
+        guard let appState else { return }
+        appState.endEditMode()
+        emitter.emitIsEditingChanged(false)
     }
 
     private func handleExitEditorMode() {

@@ -7,20 +7,40 @@ import type { Profile } from '../types'
 
 export default function Library() {
   const { state, navigateTo, send } = useAppStore()
-  const { channels, videos, appMode, activeDownload, profiles, profileChannels, activeProfileId } = state
+  const {
+    channels, videos, appMode, activeDownload, profiles, profileChannels,
+    activeProfileId, isEditing,
+  } = state
 
-  // Editor mode sees every channel; viewer mode filters to the active
-  // profile's assigned channels. If there's no active profile (or no
-  // profiles at all), the viewer also sees every channel — clean fallback
-  // for installs that haven't set profiles up.
-  const visibleChannels = (() => {
-    if (appMode === 'editor') return channels
-    if (!activeProfileId) return channels
-    const assigned = new Set(profileChannels[activeProfileId] ?? [])
-    return channels.filter(c => assigned.has(c.id))
-  })()
-  const sortedChannels = [...visibleChannels].sort((a, b) => a.sortOrder - b.sortOrder)
+  // Visible-channel computation:
+  //   - Admin sees every channel (legacy fallback).
+  //   - Viewer with active profile sees only assigned channels, in the
+  //     order stored in profile_channels (per-profile sort).
+  //   - Viewer without a profile (fresh install, no profiles) sees all
+  //     channels in global sort order.
+  const assignedIds: string[] | null =
+    activeProfileId ? (profileChannels[activeProfileId] ?? []) : null
+
+  const sortedChannels = useMemo(() => {
+    if (appMode === 'editor' || !assignedIds) {
+      return [...channels].sort((a, b) => a.sortOrder - b.sortOrder)
+    }
+    // Preserve per-profile order: iterate the assignment list and
+    // resolve each id. Anything missing (channel just deleted, race)
+    // is filtered out by the type guard.
+    const byId = new Map(channels.map(c => [c.id, c] as const))
+    return assignedIds
+      .map(id => byId.get(id))
+      .filter((c): c is typeof channels[number] => c !== undefined)
+  }, [channels, assignedIds, appMode])
+
   const activeProfile = profiles.find(p => p.id === activeProfileId) ?? null
+  const showEditAffordances = isEditing && !!activeProfileId
+
+  // Drag-reorder state. Live during a drag only; reorder is committed
+  // on drop via setProfileChannels (full canonical order replacement).
+  const [draggingId, setDraggingId] = useState<string | null>(null)
+  const [overId, setOverId] = useState<string | null>(null)
 
   // Ambient background sources: every visible channel's banner. Each
   // banner cycles in for ~9s with a soft crossfade — same blur stack as
@@ -42,6 +62,7 @@ export default function Library() {
   }, [sortedChannels, videos])
 
   const handleChannelClick = (channelId: string) => {
+    if (showEditAffordances) return  // editing — block navigation
     navigateTo({ screen: 'channel', channelId })
   }
 
@@ -51,6 +72,56 @@ export default function Library() {
     } else {
       send({ type: 'requestEditorMode' })
     }
+  }
+
+  // ── Edit-layer mutations ──────────────────────────────────────────────
+  const reorderChannels = (newOrder: string[]) => {
+    if (!activeProfileId) return
+    send({
+      type: 'setProfileChannels',
+      payload: { profileId: activeProfileId, channelIds: newOrder },
+    })
+  }
+
+  const removeChannelFromProfile = (channelId: string) => {
+    if (!activeProfileId || !assignedIds) return
+    reorderChannels(assignedIds.filter(id => id !== channelId))
+  }
+
+  // Drag handlers — HTML5 DnD. Only active while edit layer is on.
+  // Drop computes the new order from the canonical assignment list
+  // (not from the rendered order, which might differ if a video was
+  // mid-add) and dispatches the full replacement.
+  const onDragStart = (id: string) => (e: React.DragEvent) => {
+    if (!showEditAffordances) return
+    setDraggingId(id)
+    e.dataTransfer.effectAllowed = 'move'
+    // Required for Firefox-like behaviour; otherwise drag never starts.
+    e.dataTransfer.setData('text/plain', id)
+  }
+  const onDragOver = (id: string) => (e: React.DragEvent) => {
+    if (!showEditAffordances || !draggingId || id === draggingId) return
+    e.preventDefault()
+    if (overId !== id) setOverId(id)
+  }
+  const onDrop = (targetId: string) => (e: React.DragEvent) => {
+    if (!showEditAffordances || !draggingId || !assignedIds) return
+    e.preventDefault()
+    const without = assignedIds.filter(x => x !== draggingId)
+    const targetIdx = without.indexOf(targetId)
+    if (targetIdx === -1) return
+    const newOrder = [
+      ...without.slice(0, targetIdx),
+      draggingId,
+      ...without.slice(targetIdx),
+    ]
+    reorderChannels(newOrder)
+    setDraggingId(null)
+    setOverId(null)
+  }
+  const onDragEnd = () => {
+    setDraggingId(null)
+    setOverId(null)
   }
 
   return (
@@ -132,20 +203,55 @@ export default function Library() {
 
         <div style={{ flex: activeDownload ? 0 : 1 }} />
 
-        {/* Right actions — Library is viewer-only now. Entering editor
-            mode auto-navigates to EditorShell (handled in App.tsx).
-              - With profiles: profile chip (click → back to picker)
-              - Without profiles: one Editor entry so the parent can
-                still get in on a fresh install. */}
+        {/* Right actions.
+            - Plain viewer + active profile: profile chip + Edit
+            - Edit layer (viewer + isEditing): banner + Admin + Exit Edit
+            - Viewer without profile (fresh install): Admin entry */}
         <div style={{
           display: 'flex',
           alignItems: 'center',
           gap: 8,
         } as CSSProperties}>
-          {activeProfile ? (
-            <ProfileChip profile={activeProfile} onClick={() =>
-              send({ type: 'setActiveProfile', payload: { profileId: null } })
-            } />
+          {showEditAffordances && activeProfile ? (
+            <>
+              <EditingBanner profile={activeProfile} />
+              <TopBarButton
+                kind="secondary"
+                onClick={() => send({ type: 'requestEditorMode' })}
+                label="Admin"
+                icon={(
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                    <path d="M10 1.5L12.5 4L4.5 12H2V9.5L10 1.5Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" fill="none" />
+                  </svg>
+                )}
+              />
+              <TopBarButton
+                kind="exit"
+                onClick={() => send({ type: 'endEditMode' })}
+                label="Done"
+                icon={(
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                    <path d="M3 7L6 10L11 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                )}
+              />
+            </>
+          ) : activeProfile ? (
+            <>
+              <TopBarButton
+                kind="secondary"
+                onClick={() => send({ type: 'requestEditMode' })}
+                label="Edit"
+                icon={(
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                    <path d="M10 1.5L12.5 4L4.5 12H2V9.5L10 1.5Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" fill="none" />
+                  </svg>
+                )}
+              />
+              <ProfileChip profile={activeProfile} onClick={() =>
+                send({ type: 'setActiveProfile', payload: { profileId: null } })
+              } />
+            </>
           ) : (
             <TopBarButton
               kind="secondary"
@@ -252,15 +358,40 @@ export default function Library() {
                 const downloadingVideo = channelVideos.find(
                   v => v.downloadState === 'downloading'
                 )
+                const isDragOver = showEditAffordances && overId === channel.id && draggingId !== channel.id
+                const isBeingDragged = showEditAffordances && draggingId === channel.id
                 return (
-                  <ChannelCard
+                  <div
                     key={channel.id}
-                    channel={channel}
-                    videos={channelVideos}
-                    isDownloading={isDownloading}
-                    downloadProgress={downloadingVideo?.downloadProgress}
-                    onClick={() => handleChannelClick(channel.id)}
-                  />
+                    draggable={showEditAffordances}
+                    onDragStart={onDragStart(channel.id)}
+                    onDragOver={onDragOver(channel.id)}
+                    onDrop={onDrop(channel.id)}
+                    onDragEnd={onDragEnd}
+                    style={{
+                      // Outline indicates a valid drop target during drag.
+                      outline: isDragOver ? '2px solid var(--accent)' : 'none',
+                      outlineOffset: 2,
+                      borderRadius: 22,
+                      opacity: isBeingDragged ? 0.4 : 1,
+                      transform: isBeingDragged ? 'scale(0.98)' : 'scale(1)',
+                      transition: 'opacity 160ms ease, transform 160ms ease, outline-color 160ms ease',
+                    }}
+                  >
+                    <ChannelCard
+                      channel={channel}
+                      videos={channelVideos}
+                      isDownloading={isDownloading}
+                      downloadProgress={downloadingVideo?.downloadProgress}
+                      onClick={() => handleChannelClick(channel.id)}
+                      isEditing={showEditAffordances}
+                      onRemoveFromProfile={
+                        showEditAffordances
+                          ? () => removeChannelFromProfile(channel.id)
+                          : undefined
+                      }
+                    />
+                  </div>
                 )
               })}
             </div>
@@ -342,6 +473,30 @@ function TopBarButton({
       <span style={{ display: 'flex', alignItems: 'center' }}>{icon}</span>
       <span>{label}</span>
     </button>
+  )
+}
+
+// ─── Editing banner — sticky chip indicating who's being edited ──────────────
+function EditingBanner({ profile }: { profile: Profile }) {
+  return (
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      gap: 8,
+      padding: '6px 12px 6px 8px',
+      borderRadius: 99,
+      background: 'rgba(155,93,229,0.16)',
+      border: '1px solid rgba(155,93,229,0.36)',
+      color: 'var(--accent)',
+      fontSize: 13,
+      fontWeight: 600,
+      letterSpacing: '-0.005em',
+    }}>
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+        <path d="M10 1.5L12.5 4L4.5 12H2V9.5L10 1.5Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" fill="none" />
+      </svg>
+      <span>Editing {profile.name}'s library</span>
+    </div>
   )
 }
 

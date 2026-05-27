@@ -31,6 +31,9 @@ enum BridgeMessageType: String, Decodable {
     case setProfileChannels
     case dismissPINEntry
     case toggleFavorite
+    // Inline edit layer
+    case requestEditMode
+    case endEditMode
 }
 
 struct BridgeMessage: Decodable {

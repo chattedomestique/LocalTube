@@ -32,6 +32,7 @@ const defaultState: AppState = {
   profiles: [],
   profileChannels: {},
   profileFavorites: {},
+  profileHiddenChannels: {},
   activeProfileId: undefined,
 }
 
@@ -260,6 +261,19 @@ function applyBridgeEvent(app: AppState, event: BridgeEvent): AppState {
     }
     case 'isEditingChanged': {
       return { ...app, isEditing: event.payload.isEditing }
+    }
+    case 'channelHiddenChanged': {
+      const { profileId, channelId, hidden } = event.payload
+      const current = new Set(app.profileHiddenChannels[profileId] ?? [])
+      if (hidden) current.add(channelId)
+      else current.delete(channelId)
+      return {
+        ...app,
+        profileHiddenChannels: {
+          ...app.profileHiddenChannels,
+          [profileId]: Array.from(current),
+        },
+      }
     }
     case 'favoriteChanged': {
       const { profileId, videoId, isFavorite } = event.payload

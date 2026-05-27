@@ -90,6 +90,9 @@ export interface AppState {
   profileChannels: Record<string, string[]>
   /** profileId → list of favorited video ids. Per-profile per-video. */
   profileFavorites: Record<string, string[]>
+  /** profileId → list of channel ids hidden from this profile (assignment
+      stays in profileChannels; just filtered out of the viewer-mode UI). */
+  profileHiddenChannels: Record<string, string[]>
   activeProfileId?: string
 }
 
@@ -119,6 +122,7 @@ export type BridgeEvent =
   | { type: 'activeProfileChanged';   payload: { activeProfileId: string | null } }
   | { type: 'favoriteChanged';        payload: { profileId: string; videoId: string; isFavorite: boolean } }
   | { type: 'isEditingChanged';       payload: { isEditing: boolean } }
+  | { type: 'channelHiddenChanged';   payload: { profileId: string; channelId: string; hidden: boolean } }
 
 // ─── Bridge Messages (JS → Swift) ─────────────────────────────────────────
 export type BridgeMessage =
@@ -149,6 +153,7 @@ export type BridgeMessage =
   | { type: 'toggleFavorite';      payload: { profileId: string; videoId: string; isFavorite: boolean } }
   | { type: 'requestEditMode' }
   | { type: 'endEditMode' }
+  | { type: 'toggleChannelHidden'; payload: { profileId: string; channelId: string; hidden: boolean } }
 
 // ─── Navigation ────────────────────────────────────────────────────────────
 export type NavScreen = 'library' | 'channel' | 'settings' | 'editor' | 'profiles'

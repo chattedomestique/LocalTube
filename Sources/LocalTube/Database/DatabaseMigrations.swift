@@ -34,6 +34,10 @@ enum DatabaseMigrations {
             try migration7SyncStateAndFavorites(db: db)
             setUserVersion(db: db, version: 7)
         }
+        if currentVersion < 8 {
+            try migration8HiddenChannels(db: db)
+            setUserVersion(db: db, version: 8)
+        }
     }
 
     // MARK: - Version Tracking
@@ -180,6 +184,34 @@ enum DatabaseMigrations {
     // - profile_favorites: M:N junction. Per-profile per-video. Two
     //   profiles assigned the same channel maintain independent favorite
     //   lists. ON DELETE CASCADE on both FKs keeps it self-cleaning.
+
+    // MARK: - Migration 8: Per-profile hidden channels
+    //
+    // Distinct from removing a channel from a profile (which deletes the
+    // profile_channels row). Hiding keeps the assignment but flags the
+    // channel as not-visible in the viewer. Easy to unhide; parents may
+    // want to temporarily de-clutter without re-doing setup.
+    // CASCADE on both FKs keeps this junction self-cleaning.
+
+    private static func migration8HiddenChannels(db: OpaquePointer) throws {
+        let sql = """
+        BEGIN TRANSACTION;
+
+        CREATE TABLE IF NOT EXISTS profile_hidden_channels (
+            profile_id TEXT NOT NULL,
+            channel_id TEXT NOT NULL,
+            hidden_at REAL NOT NULL,
+            PRIMARY KEY (profile_id, channel_id),
+            FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE,
+            FOREIGN KEY (channel_id) REFERENCES channels(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_phc_profile ON profile_hidden_channels(profile_id);
+
+        COMMIT;
+        """
+        try exec(db: db, sql: sql)
+    }
 
     private static func migration7SyncStateAndFavorites(db: OpaquePointer) throws {
         try exec(db: db, sql: "ALTER TABLE channels ADD COLUMN last_synced_at REAL;")

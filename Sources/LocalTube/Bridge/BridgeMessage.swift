@@ -34,6 +34,7 @@ enum BridgeMessageType: String, Decodable {
     // Inline edit layer
     case requestEditMode
     case endEditMode
+    case toggleChannelHidden
 }
 
 struct BridgeMessage: Decodable {

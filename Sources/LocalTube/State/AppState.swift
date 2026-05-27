@@ -176,6 +176,15 @@ final class AppState {
         library.setFavorite(profileId: profileId, videoId: videoId, isFavorite: isFavorite)
     }
 
+    // Hidden-channel forwarders
+    var profileHiddenChannels: [UUID: Set<UUID>] {
+        get { library.profileHiddenChannels }
+        set { library.profileHiddenChannels = newValue }
+    }
+    func setChannelHidden(profileId: UUID, channelId: UUID, hidden: Bool) {
+        library.setChannelHidden(profileId: profileId, channelId: channelId, hidden: hidden)
+    }
+
     func addChannel(_ channel: Channel)         { library.addChannel(channel) }
     func removeChannel(id: UUID, registerRedo: Bool = false) {
         library.removeChannel(id: id, registerRedo: registerRedo)

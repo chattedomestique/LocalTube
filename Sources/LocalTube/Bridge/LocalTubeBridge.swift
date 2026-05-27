@@ -69,7 +69,19 @@ final class LocalTubeBridge: NSObject, WKScriptMessageHandler {
         case .toggleFavorite:      handleToggleFavorite(payloadDict)
         case .requestEditMode:     handleRequestEditMode()
         case .endEditMode:         handleEndEditMode()
+        case .toggleChannelHidden: handleToggleChannelHidden(payloadDict)
         }
+    }
+
+    private func handleToggleChannelHidden(_ payload: [String: Any]) {
+        guard let appState,
+              let pidStr = payload["profileId"] as? String,
+              let pid = UUID(uuidString: pidStr),
+              let cidStr = payload["channelId"] as? String,
+              let cid = UUID(uuidString: cidStr),
+              let hidden = payload["hidden"] as? Bool else { return }
+        appState.setChannelHidden(profileId: pid, channelId: cid, hidden: hidden)
+        emitter.emitChannelHiddenChanged(profileId: pid, channelId: cid, hidden: hidden)
     }
 
     private func handleToggleFavorite(_ payload: [String: Any]) {

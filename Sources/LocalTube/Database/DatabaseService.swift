@@ -526,6 +526,58 @@ actor DatabaseService {
         }
     }
 
+    // MARK: - Profile hidden channels
+
+    /// Returns a map of profileId → set of channel ids the profile has
+    /// hidden from view (while keeping the channel assignment).
+    func fetchAllProfileHiddenChannels() throws -> [UUID: Set<UUID>] {
+        guard let db = db else { throw DatabaseError.openFailed("Not opened") }
+        let sql = "SELECT profile_id, channel_id FROM profile_hidden_channels;"
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            throw DatabaseError.prepareFailed(String(cString: sqlite3_errmsg(db)))
+        }
+        defer { sqlite3_finalize(stmt) }
+        var result: [UUID: Set<UUID>] = [:]
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            guard let pid = UUID(uuidString: columnText(stmt!, 0)),
+                  let cid = UUID(uuidString: columnText(stmt!, 1)) else { continue }
+            result[pid, default: []].insert(cid)
+        }
+        return result
+    }
+
+    func hideChannel(profileId: UUID, channelId: UUID) throws {
+        guard let db = db else { throw DatabaseError.openFailed("Not opened") }
+        let sql = "INSERT OR IGNORE INTO profile_hidden_channels (profile_id, channel_id, hidden_at) VALUES (?, ?, ?);"
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            throw DatabaseError.prepareFailed(String(cString: sqlite3_errmsg(db)))
+        }
+        defer { sqlite3_finalize(stmt) }
+        bind(stmt: stmt!, index: 1, text: profileId.uuidString)
+        bind(stmt: stmt!, index: 2, text: channelId.uuidString)
+        sqlite3_bind_double(stmt, 3, Date().timeIntervalSince1970)
+        guard sqlite3_step(stmt) == SQLITE_DONE else {
+            throw DatabaseError.execFailed(String(cString: sqlite3_errmsg(db)))
+        }
+    }
+
+    func unhideChannel(profileId: UUID, channelId: UUID) throws {
+        guard let db = db else { throw DatabaseError.openFailed("Not opened") }
+        let sql = "DELETE FROM profile_hidden_channels WHERE profile_id=? AND channel_id=?;"
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            throw DatabaseError.prepareFailed(String(cString: sqlite3_errmsg(db)))
+        }
+        defer { sqlite3_finalize(stmt) }
+        bind(stmt: stmt!, index: 1, text: profileId.uuidString)
+        bind(stmt: stmt!, index: 2, text: channelId.uuidString)
+        guard sqlite3_step(stmt) == SQLITE_DONE else {
+            throw DatabaseError.execFailed(String(cString: sqlite3_errmsg(db)))
+        }
+    }
+
     func removeFavorite(profileId: UUID, videoId: UUID) throws {
         guard let db = db else { throw DatabaseError.openFailed("Not opened") }
         let sql = "DELETE FROM profile_favorites WHERE profile_id=? AND video_id=?;"

@@ -1,5 +1,59 @@
+import type { ReactNode } from 'react'
 import type { Channel, Video } from '../types'
 import { Thumb } from './VideoCard'
+
+// Shared circular corner button used by the edit-layer affordances on
+// the channel card. Three tones — destructive (×), neutral (hide), and
+// positive (unhide) — all the same shape so they read as a button row.
+function EditCornerButton({
+  onClick, title, ariaLabel, icon, tone,
+}: {
+  onClick: () => void
+  title: string
+  ariaLabel: string
+  icon: ReactNode
+  tone: 'destructive' | 'neutral' | 'positive'
+}) {
+  const palette = (() => {
+    switch (tone) {
+      case 'destructive':
+        return { bg: 'rgba(248,113,113,0.88)', border: 'rgba(255,255,255,0.35)', color: 'white' }
+      case 'positive':
+        return { bg: 'rgba(96,165,250,0.88)', border: 'rgba(255,255,255,0.32)', color: 'white' }
+      case 'neutral':
+        return { bg: 'rgba(0,0,0,0.62)', border: 'rgba(255,255,255,0.28)', color: 'white' }
+    }
+  })()
+  return (
+    <button
+      type="button"
+      onClick={(e) => { e.stopPropagation(); onClick() }}
+      title={title}
+      aria-label={ariaLabel}
+      style={{
+        width: 32,
+        height: 32,
+        borderRadius: '50%',
+        background: palette.bg,
+        border: `1px solid ${palette.border}`,
+        color: palette.color,
+        cursor: 'pointer',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 0,
+        boxShadow: '0 4px 12px rgba(0,0,0,0.42)',
+        backdropFilter: 'blur(12px)',
+        WebkitBackdropFilter: 'blur(12px)',
+        transition: 'transform 160ms cubic-bezier(0.25,1,0.5,1)',
+      }}
+      onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.10)' }}
+      onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)' }}
+    >
+      {icon}
+    </button>
+  )
+}
 
 interface Props {
   channel: Channel
@@ -10,8 +64,14 @@ interface Props {
   /** True when the parent is in the inline edit layer for this profile.
       Adds drag handle + remove-from-profile button; click is a no-op. */
   isEditing?: boolean
+  /** True when this channel is currently hidden from the active profile.
+      Visible only in edit layer; viewer mode filters hidden channels out
+      of the grid entirely. */
+  isHidden?: boolean
   /** Called when the parent clicks the × button while editing. */
   onRemoveFromProfile?: () => void
+  /** Called when the parent toggles the hide/unhide eye button. */
+  onToggleHidden?: () => void
 }
 
 // "New" = a video became ready within the last NEW_VIDEO_WINDOW_MS. Stays
@@ -21,7 +81,7 @@ const NEW_VIDEO_WINDOW_MS = 1000 * 60 * 60 * 24 * 3
 
 export default function ChannelCard({
   channel, videos, isDownloading, downloadProgress, onClick,
-  isEditing, onRemoveFromProfile,
+  isEditing, isHidden, onRemoveFromProfile, onToggleHidden,
 }: Props) {
   const readyVideos = videos.filter(v => v.downloadState === 'ready')
 
@@ -54,6 +114,11 @@ export default function ChannelCard({
         borderRadius: 22,
         userSelect: 'none',
         WebkitUserSelect: 'none',
+        // Hidden channels read as dimmed in the edit layer so the
+        // parent can see what's hidden without it competing visually
+        // with the visible cards.
+        opacity: isEditing && isHidden ? 0.45 : 1,
+        transition: 'opacity 200ms ease',
       }}
     >
       {/* Card image — prefer YouTube channel banner, fall back to most
@@ -162,45 +227,86 @@ export default function ChannelCard({
               Drag to reorder
             </div>
           </div>
-          {/* Remove-from-profile × button — top-right, above all overlays */}
-          {onRemoveFromProfile && (
-            <button
-              type="button"
-              onClick={(e) => { e.stopPropagation(); onRemoveFromProfile() }}
-              title="Remove from this profile"
-              aria-label="Remove channel from profile"
-              style={{
-                position: 'absolute',
-                top: 12,
-                right: 12,
-                zIndex: 3,
-                width: 32,
-                height: 32,
-                borderRadius: '50%',
-                background: 'rgba(248,113,113,0.88)',
-                border: '1px solid rgba(255,255,255,0.35)',
-                color: 'white',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                padding: 0,
-                boxShadow: '0 4px 12px rgba(0,0,0,0.45)',
-                transition: 'transform 160ms cubic-bezier(0.25,1,0.5,1), background 160ms ease',
-              }}
-              onMouseEnter={e => {
-                e.currentTarget.style.transform = 'scale(1.10)'
-                e.currentTarget.style.background = 'rgba(248,113,113,1)'
-              }}
-              onMouseLeave={e => {
-                e.currentTarget.style.transform = 'scale(1)'
-                e.currentTarget.style.background = 'rgba(248,113,113,0.88)'
-              }}
-            >
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                <path d="M3 3L11 11M11 3L3 11" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          {/* Edit-layer corner buttons — × (remove) on top, eye toggle
+              (hide/unhide) below. Both sit above the dim overlay and the
+              hide overlay so they're always tappable. */}
+          <div style={{
+            position: 'absolute',
+            top: 12,
+            right: 12,
+            zIndex: 3,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 8,
+            alignItems: 'flex-end',
+          }}>
+            {onRemoveFromProfile && (
+              <EditCornerButton
+                onClick={onRemoveFromProfile}
+                title="Remove from this profile"
+                ariaLabel="Remove channel from profile"
+                tone="destructive"
+                icon={(
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                    <path d="M3 3L11 11M11 3L3 11" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  </svg>
+                )}
+              />
+            )}
+            {onToggleHidden && (
+              <EditCornerButton
+                onClick={onToggleHidden}
+                title={isHidden ? 'Unhide channel' : 'Hide from this profile'}
+                ariaLabel={isHidden ? 'Unhide channel' : 'Hide channel'}
+                tone={isHidden ? 'positive' : 'neutral'}
+                icon={isHidden ? (
+                  // open eye → click to unhide
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                    <path d="M1.5 8s2.5-4.5 6.5-4.5S14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8z" stroke="currentColor" strokeWidth="1.4" fill="none" />
+                    <circle cx="8" cy="8" r="2" stroke="currentColor" strokeWidth="1.4" fill="none" />
+                  </svg>
+                ) : (
+                  // crossed eye → click to hide
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                    <path d="M1.5 8s2.5-4.5 6.5-4.5S14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8z" stroke="currentColor" strokeWidth="1.4" fill="none" />
+                    <path d="M2 2L14 14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                  </svg>
+                )}
+              />
+            )}
+          </div>
+
+          {/* "Hidden" pill — bottom-center of the card while editing,
+              only when actually hidden. Tells the parent at a glance
+              what's hidden in this profile. */}
+          {isHidden && (
+            <div style={{
+              position: 'absolute',
+              bottom: 14,
+              left: '50%',
+              transform: 'translateX(-50%)',
+              zIndex: 3,
+              padding: '5px 12px',
+              borderRadius: 99,
+              background: 'rgba(0,0,0,0.75)',
+              border: '1px solid rgba(255,255,255,0.22)',
+              backdropFilter: 'blur(12px)',
+              WebkitBackdropFilter: 'blur(12px)',
+              color: 'rgba(255,255,255,0.92)',
+              fontSize: 12,
+              fontWeight: 700,
+              letterSpacing: '0.04em',
+              textTransform: 'uppercase',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+            }}>
+              <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
+                <path d="M1.5 5.5s1.5-3 4-3 4 3 4 3-1.5 3-4 3-4-3-4-3z" stroke="currentColor" strokeWidth="1.2" fill="none" />
+                <path d="M1.5 1.5L9.5 9.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
               </svg>
-            </button>
+              Hidden
+            </div>
           )}
         </>
       )}

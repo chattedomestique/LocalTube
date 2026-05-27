@@ -145,6 +145,14 @@ final class BridgeEventEmitter {
             "isFavorite": isFavorite,
         ])
     }
+
+    func emitChannelHiddenChanged(profileId: UUID, channelId: UUID, hidden: Bool) {
+        emit("channelHiddenChanged", payload: [
+            "profileId": profileId.uuidString,
+            "channelId": channelId.uuidString,
+            "hidden":    hidden,
+        ])
+    }
 }
 
 // MARK: - Shared Formatter
@@ -206,6 +214,12 @@ extension AppState {
             favMap[pid.uuidString] = vids.map { $0.uuidString }
         }
         payload["profileFavorites"] = favMap
+
+        var hiddenMap: [String: [String]] = [:]
+        for (pid, cids) in profileHiddenChannels {
+            hiddenMap[pid.uuidString] = cids.map { $0.uuidString }
+        }
+        payload["profileHiddenChannels"] = hiddenMap
 
         return payload
     }

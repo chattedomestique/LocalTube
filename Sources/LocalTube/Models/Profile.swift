@@ -20,6 +20,12 @@ struct Profile: Identifiable, Codable, Hashable, Sendable {
     var color: String?
     var sortOrder: Int
     let createdAt: Date
+    /// The profile's currently-active playlist (what the tray shows /
+    /// plays through). nil until the Up Next playlist is created.
+    var activePlaylistId: UUID?
+    /// Channel-playback behaviour at end-of-video: repeat / sequential /
+    /// random / exit. nil → "exit" default. Wired up in Phase 4.
+    var autoPlaybackMode: String?
 
     init(
         id: UUID = UUID(),
@@ -28,7 +34,9 @@ struct Profile: Identifiable, Codable, Hashable, Sendable {
         icon: String? = nil,
         color: String? = nil,
         sortOrder: Int = 0,
-        createdAt: Date = Date()
+        createdAt: Date = Date(),
+        activePlaylistId: UUID? = nil,
+        autoPlaybackMode: String? = nil
     ) {
         self.id = id
         self.name = name
@@ -37,5 +45,7 @@ struct Profile: Identifiable, Codable, Hashable, Sendable {
         self.color = color
         self.sortOrder = sortOrder
         self.createdAt = createdAt
+        self.activePlaylistId = activePlaylistId
+        self.autoPlaybackMode = autoPlaybackMode
     }
 }

@@ -153,6 +153,43 @@ final class BridgeEventEmitter {
             "hidden":    hidden,
         ])
     }
+
+    // MARK: - Playlist diff emitters
+
+    func emitPlaylistUpserted(_ playlist: Playlist) {
+        emit("playlistUpserted", payload: ["playlist": playlist.bridgePayload()])
+    }
+
+    func emitPlaylistRemoved(id: UUID) {
+        emit("playlistRemoved", payload: ["playlistId": id.uuidString])
+    }
+
+    func emitPlaylistVideosUpdated(playlistId: UUID, videoIds: [UUID]) {
+        emit("playlistVideosUpdated", payload: [
+            "playlistId": playlistId.uuidString,
+            "videoIds":   videoIds.map { $0.uuidString },
+        ])
+    }
+
+    func emitActivePlaylistChanged(profileId: UUID, activePlaylistId: UUID?) {
+        emit("activePlaylistChanged", payload: [
+            "profileId":        profileId.uuidString,
+            "activePlaylistId": activePlaylistId?.uuidString as Any,
+        ])
+    }
+}
+
+extension Playlist {
+    func bridgePayload() -> [String: Any] {
+        [
+            "id":        id.uuidString,
+            "profileId": profileId.uuidString,
+            "name":      name,
+            "sortOrder": sortOrder,
+            "isSystem":  isSystem,
+            "createdAt": sharedISO8601Formatter.string(from: createdAt),
+        ]
+    }
 }
 
 // MARK: - Shared Formatter
@@ -221,6 +258,13 @@ extension AppState {
         }
         payload["profileHiddenChannels"] = hiddenMap
 
+        payload["playlists"] = playlists.map { $0.bridgePayload() }
+        var plvMap: [String: [String]] = [:]
+        for (plid, vids) in playlistVideos {
+            plvMap[plid.uuidString] = vids.map { $0.uuidString }
+        }
+        payload["playlistVideos"] = plvMap
+
         return payload
     }
 }
@@ -236,6 +280,8 @@ extension Profile {
         if let emoji = emoji { p["emoji"] = emoji }
         if let icon  = icon  { p["icon"]  = icon  }
         if let color = color { p["color"] = color }
+        if let apid  = activePlaylistId { p["activePlaylistId"] = apid.uuidString }
+        if let apm   = autoPlaybackMode { p["autoPlaybackMode"] = apm }
         return p
     }
 }

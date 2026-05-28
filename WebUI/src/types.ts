@@ -54,6 +54,19 @@ export interface Profile {
   color?: string
   sortOrder: number
   createdAt: string
+  /** The playlist the tray shows / plays through. */
+  activePlaylistId?: string
+  /** Channel-playback end behaviour (Phase 4): repeat/sequential/random/exit */
+  autoPlaybackMode?: string
+}
+
+export interface Playlist {
+  id: string
+  profileId: string
+  name: string
+  sortOrder: number
+  isSystem: boolean
+  createdAt: string
 }
 
 // ─── App Mode ──────────────────────────────────────────────────────────────
@@ -93,6 +106,10 @@ export interface AppState {
   /** profileId → list of channel ids hidden from this profile (assignment
       stays in profileChannels; just filtered out of the viewer-mode UI). */
   profileHiddenChannels: Record<string, string[]>
+  /** All playlists across all profiles. */
+  playlists: Playlist[]
+  /** playlistId → ordered video ids. */
+  playlistVideos: Record<string, string[]>
   activeProfileId?: string
 }
 
@@ -123,6 +140,10 @@ export type BridgeEvent =
   | { type: 'favoriteChanged';        payload: { profileId: string; videoId: string; isFavorite: boolean } }
   | { type: 'isEditingChanged';       payload: { isEditing: boolean } }
   | { type: 'channelHiddenChanged';   payload: { profileId: string; channelId: string; hidden: boolean } }
+  | { type: 'playlistUpserted';       payload: { playlist: Playlist } }
+  | { type: 'playlistRemoved';        payload: { playlistId: string } }
+  | { type: 'playlistVideosUpdated';  payload: { playlistId: string; videoIds: string[] } }
+  | { type: 'activePlaylistChanged';  payload: { profileId: string; activePlaylistId: string | null } }
 
 // ─── Bridge Messages (JS → Swift) ─────────────────────────────────────────
 export type BridgeMessage =
@@ -154,6 +175,14 @@ export type BridgeMessage =
   | { type: 'requestEditMode' }
   | { type: 'endEditMode' }
   | { type: 'toggleChannelHidden'; payload: { profileId: string; channelId: string; hidden: boolean } }
+  | { type: 'createPlaylist';      payload: { profileId: string; name: string } }
+  | { type: 'renamePlaylist';      payload: { playlistId: string; name: string } }
+  | { type: 'deletePlaylist';      payload: { playlistId: string } }
+  | { type: 'setActivePlaylist';   payload: { profileId: string; playlistId: string | null } }
+  | { type: 'addToPlaylist';       payload: { playlistId: string; videoId: string } }
+  | { type: 'removeFromPlaylist';  payload: { playlistId: string; videoId: string } }
+  | { type: 'reorderPlaylist';     payload: { playlistId: string; videoIds: string[] } }
+  | { type: 'clearPlaylist';       payload: { playlistId: string } }
 
 // ─── Navigation ────────────────────────────────────────────────────────────
 export type NavScreen = 'library' | 'channel' | 'settings' | 'editor' | 'profiles'

@@ -70,7 +70,102 @@ final class LocalTubeBridge: NSObject, WKScriptMessageHandler {
         case .requestEditMode:     handleRequestEditMode()
         case .endEditMode:         handleEndEditMode()
         case .toggleChannelHidden: handleToggleChannelHidden(payloadDict)
+        case .createPlaylist:      handleCreatePlaylist(payloadDict)
+        case .renamePlaylist:      handleRenamePlaylist(payloadDict)
+        case .deletePlaylist:      handleDeletePlaylist(payloadDict)
+        case .setActivePlaylist:   handleSetActivePlaylist2(payloadDict)
+        case .addToPlaylist:       handleAddToPlaylist(payloadDict)
+        case .removeFromPlaylist:  handleRemoveFromPlaylist(payloadDict)
+        case .reorderPlaylist:     handleReorderPlaylist(payloadDict)
+        case .clearPlaylist:       handleClearPlaylist(payloadDict)
         }
+    }
+
+    // MARK: - Playlists
+
+    private func handleCreatePlaylist(_ payload: [String: Any]) {
+        guard let appState,
+              let pidStr = payload["profileId"] as? String,
+              let pid = UUID(uuidString: pidStr),
+              let name = payload["name"] as? String,
+              !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              name.count <= 60 else { return }
+        let playlist = appState.createPlaylist(profileId: pid, name: name)
+        emitter.emitPlaylistUpserted(playlist)
+    }
+
+    private func handleRenamePlaylist(_ payload: [String: Any]) {
+        guard let appState,
+              let idStr = payload["playlistId"] as? String,
+              let id = UUID(uuidString: idStr),
+              let name = payload["name"] as? String,
+              !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              name.count <= 60 else { return }
+        appState.renamePlaylist(id: id, name: name)
+        if let pl = appState.playlists.first(where: { $0.id == id }) {
+            emitter.emitPlaylistUpserted(pl)
+        }
+    }
+
+    private func handleDeletePlaylist(_ payload: [String: Any]) {
+        guard let appState,
+              let idStr = payload["playlistId"] as? String,
+              let id = UUID(uuidString: idStr),
+              let pl = appState.playlists.first(where: { $0.id == id }) else { return }
+        let profileId = pl.profileId
+        appState.deletePlaylist(id: id)
+        emitter.emitPlaylistRemoved(id: id)
+        // Active may have fallen back to Up Next.
+        if let p = appState.profiles.first(where: { $0.id == profileId }) {
+            emitter.emitActivePlaylistChanged(profileId: profileId, activePlaylistId: p.activePlaylistId)
+        }
+    }
+
+    private func handleSetActivePlaylist2(_ payload: [String: Any]) {
+        guard let appState,
+              let pidStr = payload["profileId"] as? String,
+              let pid = UUID(uuidString: pidStr) else { return }
+        let playlistId = (payload["playlistId"] as? String).flatMap(UUID.init(uuidString:))
+        appState.setActivePlaylist(profileId: pid, playlistId: playlistId)
+        emitter.emitActivePlaylistChanged(profileId: pid, activePlaylistId: playlistId)
+    }
+
+    private func handleAddToPlaylist(_ payload: [String: Any]) {
+        guard let appState,
+              let plidStr = payload["playlistId"] as? String,
+              let plid = UUID(uuidString: plidStr),
+              let vidStr = payload["videoId"] as? String,
+              let vid = UUID(uuidString: vidStr) else { return }
+        appState.addToPlaylist(playlistId: plid, videoId: vid)
+        emitter.emitPlaylistVideosUpdated(playlistId: plid, videoIds: appState.playlistVideos[plid] ?? [])
+    }
+
+    private func handleRemoveFromPlaylist(_ payload: [String: Any]) {
+        guard let appState,
+              let plidStr = payload["playlistId"] as? String,
+              let plid = UUID(uuidString: plidStr),
+              let vidStr = payload["videoId"] as? String,
+              let vid = UUID(uuidString: vidStr) else { return }
+        appState.removeFromPlaylist(playlistId: plid, videoId: vid)
+        emitter.emitPlaylistVideosUpdated(playlistId: plid, videoIds: appState.playlistVideos[plid] ?? [])
+    }
+
+    private func handleReorderPlaylist(_ payload: [String: Any]) {
+        guard let appState,
+              let plidStr = payload["playlistId"] as? String,
+              let plid = UUID(uuidString: plidStr),
+              let rawIds = payload["videoIds"] as? [String] else { return }
+        let ids = rawIds.compactMap(UUID.init(uuidString:))
+        appState.reorderPlaylist(playlistId: plid, videoIds: ids)
+        emitter.emitPlaylistVideosUpdated(playlistId: plid, videoIds: ids)
+    }
+
+    private func handleClearPlaylist(_ payload: [String: Any]) {
+        guard let appState,
+              let plidStr = payload["playlistId"] as? String,
+              let plid = UUID(uuidString: plidStr) else { return }
+        appState.clearPlaylist(playlistId: plid)
+        emitter.emitPlaylistVideosUpdated(playlistId: plid, videoIds: [])
     }
 
     private func handleToggleChannelHidden(_ payload: [String: Any]) {

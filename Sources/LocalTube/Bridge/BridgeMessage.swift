@@ -35,6 +35,15 @@ enum BridgeMessageType: String, Decodable {
     case requestEditMode
     case endEditMode
     case toggleChannelHidden
+    // Playlists
+    case createPlaylist
+    case renamePlaylist
+    case deletePlaylist
+    case setActivePlaylist
+    case addToPlaylist
+    case removeFromPlaylist
+    case reorderPlaylist
+    case clearPlaylist
 }
 
 struct BridgeMessage: Decodable {

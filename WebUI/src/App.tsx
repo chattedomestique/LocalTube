@@ -12,6 +12,7 @@ import Profiles from './screens/Profiles'
 import ProfilePicker from './screens/ProfilePicker'
 import EditorShell from './components/EditorShell'
 import MountWithExit from './components/MountWithExit'
+import QueueTray from './components/QueueTray'
 
 // H6 fix: React error boundary prevents a white screen on uncaught render errors.
 // Shows a recoverable error UI and logs the error to Swift via the bridge.
@@ -161,9 +162,15 @@ function AppContent() {
   const showProfilePicker =
     appMode !== 'editor' && profiles.length > 0 && !activeProfileId
 
+  // Queue tray is available in viewer mode with an active profile —
+  // read-only for kids, editable for adults in the edit layer. Hidden
+  // on the picker (no profile) and in admin mode.
+  const showQueueTray = appMode !== 'editor' && !!activeProfileId && !showProfilePicker
+
   return (
     <>
       {screen}
+      {showQueueTray && <QueueTray />}
       {/* Overlays wrapped in MountWithExit so they fade out smoothly
           instead of popping when their condition flips false. */}
       <MountWithExit show={showProfilePicker}>

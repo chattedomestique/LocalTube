@@ -62,10 +62,15 @@ interface Props {
   isActiveDownload?: boolean
   /** undefined = no profile context (no heart shown). */
   isFavorite?: boolean
+  /** When true, shows the "+ add to queue" button (edit layer only). */
+  showAddToQueue?: boolean
+  /** True if this video is already in the active queue (button shows ✓). */
+  isInQueue?: boolean
   onPlay: () => void
   onDelete?: () => void
   onRetry?: () => void
   onToggleFavorite?: () => void
+  onAddToQueue?: () => void
 }
 
 function formatDuration(seconds: number): string {
@@ -85,10 +90,13 @@ function VideoCard({
   isEditorMode,
   isActiveDownload,
   isFavorite,
+  showAddToQueue,
+  isInQueue,
   onPlay,
   onDelete,
   onRetry,
   onToggleFavorite,
+  onAddToQueue,
 }: Props) {
   const isReady = video.downloadState === 'ready'
   const isDownloading = video.downloadState === 'downloading' || isActiveDownload
@@ -267,6 +275,49 @@ function VideoCard({
               </button>
             )}
           </div>
+        )}
+
+        {/* Add-to-queue button — top-right. Edit layer only (adults
+            curate). Shows + normally, ✓ when the video is already in
+            the active queue. */}
+        {showAddToQueue && isReady && (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onAddToQueue?.() }}
+            aria-label={isInQueue ? 'In queue' : 'Add to queue'}
+            title={isInQueue ? 'In queue' : 'Add to queue'}
+            style={{
+              position: 'absolute',
+              top: 8,
+              right: 8,
+              width: 34,
+              height: 34,
+              borderRadius: '50%',
+              background: isInQueue ? 'rgba(52,211,153,0.92)' : 'rgba(0,0,0,0.55)',
+              border: `1px solid ${isInQueue ? 'rgba(255,255,255,0.4)' : 'rgba(255,255,255,0.18)'}`,
+              backdropFilter: 'blur(10px)',
+              WebkitBackdropFilter: 'blur(10px)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              padding: 0,
+              zIndex: 2,
+              transition: 'background 180ms ease, transform 180ms cubic-bezier(0.25,1,0.5,1)',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.10)' }}
+            onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)' }}
+          >
+            {isInQueue ? (
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <path d="M3.5 8.5L6.5 11.5L12.5 5" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            ) : (
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <path d="M8 3.5V12.5M3.5 8H12.5" stroke="white" strokeWidth="1.8" strokeLinecap="round" />
+              </svg>
+            )}
+          </button>
         )}
 
         {/* Favorite heart — top-left, only when a profile context is
@@ -458,5 +509,7 @@ export default memo(VideoCard, (prev, next) =>
   prev.video === next.video &&
   prev.isEditorMode === next.isEditorMode &&
   prev.isActiveDownload === next.isActiveDownload &&
-  prev.isFavorite === next.isFavorite
+  prev.isFavorite === next.isFavorite &&
+  prev.showAddToQueue === next.showAddToQueue &&
+  prev.isInQueue === next.isInQueue
 )

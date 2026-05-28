@@ -33,6 +33,8 @@ const defaultState: AppState = {
   profileChannels: {},
   profileFavorites: {},
   profileHiddenChannels: {},
+  playlists: [],
+  playlistVideos: {},
   activeProfileId: undefined,
 }
 
@@ -273,6 +275,43 @@ function applyBridgeEvent(app: AppState, event: BridgeEvent): AppState {
           ...app.profileHiddenChannels,
           [profileId]: Array.from(current),
         },
+      }
+    }
+    // ── Playlist events ───────────────────────────────────────────────────
+    case 'playlistUpserted': {
+      const { playlist } = event.payload
+      const idx = app.playlists.findIndex(p => p.id === playlist.id)
+      const playlists = idx === -1
+        ? [...app.playlists, playlist]
+        : app.playlists.map((p, i) => (i === idx ? playlist : p))
+      const playlistVideos = app.playlistVideos[playlist.id]
+        ? app.playlistVideos
+        : { ...app.playlistVideos, [playlist.id]: [] }
+      return { ...app, playlists, playlistVideos }
+    }
+    case 'playlistRemoved': {
+      const { playlistId } = event.payload
+      const playlists = app.playlists.filter(p => p.id !== playlistId)
+      const playlistVideos = { ...app.playlistVideos }
+      delete playlistVideos[playlistId]
+      return { ...app, playlists, playlistVideos }
+    }
+    case 'playlistVideosUpdated': {
+      const { playlistId, videoIds } = event.payload
+      return {
+        ...app,
+        playlistVideos: { ...app.playlistVideos, [playlistId]: videoIds },
+      }
+    }
+    case 'activePlaylistChanged': {
+      const { profileId, activePlaylistId } = event.payload
+      return {
+        ...app,
+        profiles: app.profiles.map(p =>
+          p.id === profileId
+            ? { ...p, activePlaylistId: activePlaylistId ?? undefined }
+            : p
+        ),
       }
     }
     case 'favoriteChanged': {

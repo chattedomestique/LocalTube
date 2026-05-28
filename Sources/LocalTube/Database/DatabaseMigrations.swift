@@ -38,6 +38,10 @@ enum DatabaseMigrations {
             try migration8HiddenChannels(db: db)
             setUserVersion(db: db, version: 8)
         }
+        if currentVersion < 9 {
+            try migration9Playlists(db: db)
+            setUserVersion(db: db, version: 9)
+        }
     }
 
     // MARK: - Version Tracking
@@ -192,6 +196,53 @@ enum DatabaseMigrations {
     // channel as not-visible in the viewer. Easy to unhide; parents may
     // want to temporarily de-clutter without re-doing setup.
     // CASCADE on both FKs keeps this junction self-cleaning.
+
+    // MARK: - Migration 9: Playlists + per-profile playback prefs
+    //
+    // playlists: profile-scoped ordered video lists. is_system flags the
+    // auto-created "Up Next" queue. playlist_videos: the ordered
+    // membership. Two new profile columns: active_playlist_id (which
+    // playlist the tray shows / plays) and auto_playback_mode (Phase 4).
+    //
+    // The "Up Next" system playlist isn't seeded here — SQLite can't
+    // generate UUIDs in pure SQL. LibraryStore.ensureUpNextPlaylists()
+    // creates one per profile on load (and at profile-creation time),
+    // which also covers profiles added after this migration runs.
+
+    private static func migration9Playlists(db: OpaquePointer) throws {
+        let sql = """
+        BEGIN TRANSACTION;
+
+        CREATE TABLE IF NOT EXISTS playlists (
+            id TEXT PRIMARY KEY NOT NULL,
+            profile_id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            created_at REAL NOT NULL,
+            is_system INTEGER NOT NULL DEFAULT 0,
+            FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_playlists_profile ON playlists(profile_id);
+
+        CREATE TABLE IF NOT EXISTS playlist_videos (
+            playlist_id TEXT NOT NULL,
+            video_id TEXT NOT NULL,
+            sort_order INTEGER NOT NULL,
+            added_at REAL NOT NULL,
+            PRIMARY KEY (playlist_id, video_id),
+            FOREIGN KEY (playlist_id) REFERENCES playlists(id) ON DELETE CASCADE,
+            FOREIGN KEY (video_id) REFERENCES videos(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_playlist_videos_playlist ON playlist_videos(playlist_id);
+
+        COMMIT;
+        """
+        try exec(db: db, sql: sql)
+        try exec(db: db, sql: "ALTER TABLE profiles ADD COLUMN active_playlist_id TEXT;")
+        try exec(db: db, sql: "ALTER TABLE profiles ADD COLUMN auto_playback_mode TEXT;")
+    }
 
     private static func migration8HiddenChannels(db: OpaquePointer) throws {
         let sql = """

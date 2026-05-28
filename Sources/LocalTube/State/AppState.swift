@@ -185,6 +185,29 @@ final class AppState {
         library.setChannelHidden(profileId: profileId, channelId: channelId, hidden: hidden)
     }
 
+    // Playlist forwarders
+    var playlists: [Playlist] {
+        get { library.playlists }
+        set { library.playlists = newValue }
+    }
+    var playlistVideos: [UUID: [UUID]] {
+        get { library.playlistVideos }
+        set { library.playlistVideos = newValue }
+    }
+    @discardableResult
+    func createPlaylist(profileId: UUID, name: String) -> Playlist {
+        library.createPlaylist(profileId: profileId, name: name)
+    }
+    func renamePlaylist(id: UUID, name: String)        { library.renamePlaylist(id: id, name: name) }
+    func deletePlaylist(id: UUID)                      { library.deletePlaylist(id: id) }
+    func setActivePlaylist(profileId: UUID, playlistId: UUID?) {
+        library.setActivePlaylist(profileId: profileId, playlistId: playlistId)
+    }
+    func addToPlaylist(playlistId: UUID, videoId: UUID)      { library.addToPlaylist(playlistId: playlistId, videoId: videoId) }
+    func removeFromPlaylist(playlistId: UUID, videoId: UUID) { library.removeFromPlaylist(playlistId: playlistId, videoId: videoId) }
+    func reorderPlaylist(playlistId: UUID, videoIds: [UUID]) { library.reorderPlaylist(playlistId: playlistId, videoIds: videoIds) }
+    func clearPlaylist(playlistId: UUID)                    { library.clearPlaylist(playlistId: playlistId) }
+
     func addChannel(_ channel: Channel)         { library.addChannel(channel) }
     func removeChannel(id: UUID, registerRedo: Bool = false) {
         library.removeChannel(id: id, registerRedo: registerRedo)

@@ -291,7 +291,7 @@ actor DatabaseService {
 
     func fetchAllProfiles() throws -> [Profile] {
         guard let db = db else { throw DatabaseError.openFailed("Not opened") }
-        let sql = "SELECT id, name, emoji, sort_order, created_at, icon, color FROM profiles ORDER BY sort_order ASC, created_at ASC;"
+        let sql = "SELECT id, name, emoji, sort_order, created_at, icon, color, active_playlist_id, auto_playback_mode FROM profiles ORDER BY sort_order ASC, created_at ASC;"
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
             throw DatabaseError.prepareFailed(String(cString: sqlite3_errmsg(db)))
@@ -307,12 +307,190 @@ actor DatabaseService {
             let createdAt = Date(timeIntervalSince1970: sqlite3_column_double(stmt!, 4))
             let icon = columnTextOptional(stmt!, 5)
             let color = columnTextOptional(stmt!, 6)
+            let activePlaylistId = columnTextOptional(stmt!, 7).flatMap(UUID.init(uuidString:))
+            let autoPlaybackMode = columnTextOptional(stmt!, 8)
             profiles.append(Profile(
                 id: id, name: name, emoji: emoji, icon: icon, color: color,
-                sortOrder: sortOrder, createdAt: createdAt
+                sortOrder: sortOrder, createdAt: createdAt,
+                activePlaylistId: activePlaylistId, autoPlaybackMode: autoPlaybackMode
             ))
         }
         return profiles
+    }
+
+    func setActivePlaylist(profileId: UUID, playlistId: UUID?) throws {
+        guard let db = db else { throw DatabaseError.openFailed("Not opened") }
+        let sql = "UPDATE profiles SET active_playlist_id=? WHERE id=?;"
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            throw DatabaseError.prepareFailed(String(cString: sqlite3_errmsg(db)))
+        }
+        defer { sqlite3_finalize(stmt) }
+        bindNullable(stmt: stmt!, index: 1, text: playlistId?.uuidString)
+        bind(stmt: stmt!, index: 2, text: profileId.uuidString)
+        guard sqlite3_step(stmt) == SQLITE_DONE else {
+            throw DatabaseError.execFailed(String(cString: sqlite3_errmsg(db)))
+        }
+    }
+
+    // MARK: - Playlists
+
+    func fetchAllPlaylists() throws -> [Playlist] {
+        guard let db = db else { throw DatabaseError.openFailed("Not opened") }
+        let sql = "SELECT id, profile_id, name, sort_order, created_at, is_system FROM playlists ORDER BY is_system DESC, sort_order ASC, created_at ASC;"
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            throw DatabaseError.prepareFailed(String(cString: sqlite3_errmsg(db)))
+        }
+        defer { sqlite3_finalize(stmt) }
+        var result: [Playlist] = []
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            guard let id = UUID(uuidString: columnText(stmt!, 0)),
+                  let pid = UUID(uuidString: columnText(stmt!, 1)) else { continue }
+            result.append(Playlist(
+                id: id, profileId: pid, name: columnText(stmt!, 2),
+                sortOrder: Int(sqlite3_column_int64(stmt!, 3)),
+                createdAt: Date(timeIntervalSince1970: sqlite3_column_double(stmt!, 4)),
+                isSystem: sqlite3_column_int64(stmt!, 5) != 0
+            ))
+        }
+        return result
+    }
+
+    /// Returns playlistId → ordered video ids.
+    func fetchAllPlaylistVideos() throws -> [UUID: [UUID]] {
+        guard let db = db else { throw DatabaseError.openFailed("Not opened") }
+        let sql = "SELECT playlist_id, video_id FROM playlist_videos ORDER BY playlist_id, sort_order ASC;"
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            throw DatabaseError.prepareFailed(String(cString: sqlite3_errmsg(db)))
+        }
+        defer { sqlite3_finalize(stmt) }
+        var result: [UUID: [UUID]] = [:]
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            guard let plid = UUID(uuidString: columnText(stmt!, 0)),
+                  let vid = UUID(uuidString: columnText(stmt!, 1)) else { continue }
+            result[plid, default: []].append(vid)
+        }
+        return result
+    }
+
+    func insertPlaylist(_ playlist: Playlist) throws {
+        guard let db = db else { throw DatabaseError.openFailed("Not opened") }
+        let sql = "INSERT INTO playlists (id, profile_id, name, sort_order, created_at, is_system) VALUES (?, ?, ?, ?, ?, ?);"
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            throw DatabaseError.prepareFailed(String(cString: sqlite3_errmsg(db)))
+        }
+        defer { sqlite3_finalize(stmt) }
+        bind(stmt: stmt!, index: 1, text: playlist.id.uuidString)
+        bind(stmt: stmt!, index: 2, text: playlist.profileId.uuidString)
+        bind(stmt: stmt!, index: 3, text: playlist.name)
+        sqlite3_bind_int64(stmt, 4, Int64(playlist.sortOrder))
+        sqlite3_bind_double(stmt, 5, playlist.createdAt.timeIntervalSince1970)
+        sqlite3_bind_int64(stmt, 6, playlist.isSystem ? 1 : 0)
+        guard sqlite3_step(stmt) == SQLITE_DONE else {
+            throw DatabaseError.execFailed(String(cString: sqlite3_errmsg(db)))
+        }
+    }
+
+    func updatePlaylist(_ playlist: Playlist) throws {
+        guard let db = db else { throw DatabaseError.openFailed("Not opened") }
+        let sql = "UPDATE playlists SET name=?, sort_order=? WHERE id=?;"
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            throw DatabaseError.prepareFailed(String(cString: sqlite3_errmsg(db)))
+        }
+        defer { sqlite3_finalize(stmt) }
+        bind(stmt: stmt!, index: 1, text: playlist.name)
+        sqlite3_bind_int64(stmt, 2, Int64(playlist.sortOrder))
+        bind(stmt: stmt!, index: 3, text: playlist.id.uuidString)
+        guard sqlite3_step(stmt) == SQLITE_DONE else {
+            throw DatabaseError.execFailed(String(cString: sqlite3_errmsg(db)))
+        }
+    }
+
+    func deletePlaylist(id: UUID) throws {
+        guard let db = db else { throw DatabaseError.openFailed("Not opened") }
+        let sql = "DELETE FROM playlists WHERE id=?;"
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            throw DatabaseError.prepareFailed(String(cString: sqlite3_errmsg(db)))
+        }
+        defer { sqlite3_finalize(stmt) }
+        bind(stmt: stmt!, index: 1, text: id.uuidString)
+        guard sqlite3_step(stmt) == SQLITE_DONE else {
+            throw DatabaseError.execFailed(String(cString: sqlite3_errmsg(db)))
+        }
+    }
+
+    /// Replaces a playlist's video membership atomically (used for
+    /// reorder + clear). Single add/remove go through dedicated methods.
+    func setPlaylistVideos(playlistId: UUID, videoIds: [UUID]) throws {
+        try beginTransaction()
+        do {
+            guard let db = db else { throw DatabaseError.openFailed("Not opened") }
+            var delStmt: OpaquePointer?
+            guard sqlite3_prepare_v2(db, "DELETE FROM playlist_videos WHERE playlist_id=?;", -1, &delStmt, nil) == SQLITE_OK else {
+                throw DatabaseError.prepareFailed(String(cString: sqlite3_errmsg(db)))
+            }
+            bind(stmt: delStmt!, index: 1, text: playlistId.uuidString)
+            if sqlite3_step(delStmt) != SQLITE_DONE { sqlite3_finalize(delStmt); throw DatabaseError.execFailed(String(cString: sqlite3_errmsg(db))) }
+            sqlite3_finalize(delStmt)
+
+            let ins = "INSERT INTO playlist_videos (playlist_id, video_id, sort_order, added_at) VALUES (?, ?, ?, ?);"
+            let now = Date().timeIntervalSince1970
+            for (i, vid) in videoIds.enumerated() {
+                var insStmt: OpaquePointer?
+                guard sqlite3_prepare_v2(db, ins, -1, &insStmt, nil) == SQLITE_OK else {
+                    throw DatabaseError.prepareFailed(String(cString: sqlite3_errmsg(db)))
+                }
+                bind(stmt: insStmt!, index: 1, text: playlistId.uuidString)
+                bind(stmt: insStmt!, index: 2, text: vid.uuidString)
+                sqlite3_bind_int64(insStmt, 3, Int64(i))
+                sqlite3_bind_double(insStmt, 4, now)
+                if sqlite3_step(insStmt) != SQLITE_DONE { sqlite3_finalize(insStmt); throw DatabaseError.execFailed(String(cString: sqlite3_errmsg(db))) }
+                sqlite3_finalize(insStmt)
+            }
+            try commitTransaction()
+        } catch {
+            rollbackTransaction()
+            throw error
+        }
+    }
+
+    /// Appends a video to the end of a playlist (or no-ops if already
+    /// present). sortOrder is the count of existing rows.
+    func addVideoToPlaylist(playlistId: UUID, videoId: UUID, sortOrder: Int) throws {
+        guard let db = db else { throw DatabaseError.openFailed("Not opened") }
+        let sql = "INSERT OR IGNORE INTO playlist_videos (playlist_id, video_id, sort_order, added_at) VALUES (?, ?, ?, ?);"
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            throw DatabaseError.prepareFailed(String(cString: sqlite3_errmsg(db)))
+        }
+        defer { sqlite3_finalize(stmt) }
+        bind(stmt: stmt!, index: 1, text: playlistId.uuidString)
+        bind(stmt: stmt!, index: 2, text: videoId.uuidString)
+        sqlite3_bind_int64(stmt, 3, Int64(sortOrder))
+        sqlite3_bind_double(stmt, 4, Date().timeIntervalSince1970)
+        guard sqlite3_step(stmt) == SQLITE_DONE else {
+            throw DatabaseError.execFailed(String(cString: sqlite3_errmsg(db)))
+        }
+    }
+
+    func removeVideoFromPlaylist(playlistId: UUID, videoId: UUID) throws {
+        guard let db = db else { throw DatabaseError.openFailed("Not opened") }
+        let sql = "DELETE FROM playlist_videos WHERE playlist_id=? AND video_id=?;"
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            throw DatabaseError.prepareFailed(String(cString: sqlite3_errmsg(db)))
+        }
+        defer { sqlite3_finalize(stmt) }
+        bind(stmt: stmt!, index: 1, text: playlistId.uuidString)
+        bind(stmt: stmt!, index: 2, text: videoId.uuidString)
+        guard sqlite3_step(stmt) == SQLITE_DONE else {
+            throw DatabaseError.execFailed(String(cString: sqlite3_errmsg(db)))
+        }
     }
 
     func insertProfile(_ profile: Profile) throws {

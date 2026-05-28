@@ -29,6 +29,13 @@ final class LibraryStore {
     /// channel stays in profile_channels but is filtered out of the
     /// viewer-mode library. Easy to unhide from the edit layer.
     var profileHiddenChannels: [UUID: Set<UUID>] = [:]  // profileId → channelIds
+
+    // Playlists — profile-scoped ordered video lists. `playlists` holds
+    // metadata; `playlistVideos` holds the ordered membership keyed by
+    // playlist id. Each profile's active playlist id lives on the
+    // Profile record (activePlaylistId).
+    var playlists: [Playlist] = []
+    var playlistVideos: [UUID: [UUID]] = [:]  // playlistId → ordered videoIds
     var activeProfileId: UUID? {
         didSet {
             if let id = activeProfileId {
@@ -80,6 +87,9 @@ final class LibraryStore {
             profileChannels = try await DatabaseService.shared.fetchAllProfileChannels()
             profileFavorites = try await DatabaseService.shared.fetchAllProfileFavorites()
             profileHiddenChannels = try await DatabaseService.shared.fetchAllProfileHiddenChannels()
+            playlists = try await DatabaseService.shared.fetchAllPlaylists()
+            playlistVideos = try await DatabaseService.shared.fetchAllPlaylistVideos()
+            await ensureUpNextPlaylists()
             // Restore the persisted active profile if it still exists. If the
             // stored id refers to a deleted profile, fall back to nil so the
             // user picks again.
@@ -101,9 +111,154 @@ final class LibraryStore {
         profiles.append(profile)
         profiles.sort { $0.sortOrder < $1.sortOrder }
         profileChannels[profile.id] = []
+        // Every profile gets an "Up Next" system playlist as its active
+        // queue from day one.
+        let upNext = Playlist(profileId: profile.id, name: "Up Next", sortOrder: 0, isSystem: true)
+        playlists.append(upNext)
+        playlistVideos[upNext.id] = []
+        if let idx = profiles.firstIndex(where: { $0.id == profile.id }) {
+            profiles[idx].activePlaylistId = upNext.id
+        }
         Task {
             await persist("insertProfile") {
                 try await DatabaseService.shared.insertProfile(profile)
+                try await DatabaseService.shared.insertPlaylist(upNext)
+                try await DatabaseService.shared.setActivePlaylist(profileId: profile.id, playlistId: upNext.id)
+            }
+        }
+    }
+
+    // MARK: - Playlists
+
+    /// Guarantees every profile has an "Up Next" system playlist set as
+    /// active. Runs on load (covers profiles created before migration 9)
+    /// and is idempotent.
+    private func ensureUpNextPlaylists() async {
+        for profile in profiles {
+            let hasSystem = playlists.contains { $0.profileId == profile.id && $0.isSystem }
+            if hasSystem {
+                // Make sure something is active.
+                if profile.activePlaylistId == nil,
+                   let sys = playlists.first(where: { $0.profileId == profile.id && $0.isSystem }) {
+                    if let idx = profiles.firstIndex(where: { $0.id == profile.id }) {
+                        profiles[idx].activePlaylistId = sys.id
+                    }
+                    await persist("seed active playlist") {
+                        try await DatabaseService.shared.setActivePlaylist(profileId: profile.id, playlistId: sys.id)
+                    }
+                }
+                continue
+            }
+            let upNext = Playlist(profileId: profile.id, name: "Up Next", sortOrder: 0, isSystem: true)
+            playlists.append(upNext)
+            playlistVideos[upNext.id] = []
+            if let idx = profiles.firstIndex(where: { $0.id == profile.id }) {
+                profiles[idx].activePlaylistId = upNext.id
+            }
+            await persist("create Up Next") {
+                try await DatabaseService.shared.insertPlaylist(upNext)
+                try await DatabaseService.shared.setActivePlaylist(profileId: profile.id, playlistId: upNext.id)
+            }
+        }
+    }
+
+    func createPlaylist(profileId: UUID, name: String) -> Playlist {
+        let count = playlists.filter { $0.profileId == profileId }.count
+        let playlist = Playlist(profileId: profileId, name: name, sortOrder: count)
+        playlists.append(playlist)
+        playlistVideos[playlist.id] = []
+        Task {
+            await persist("createPlaylist") {
+                try await DatabaseService.shared.insertPlaylist(playlist)
+            }
+        }
+        return playlist
+    }
+
+    func renamePlaylist(id: UUID, name: String) {
+        guard let idx = playlists.firstIndex(where: { $0.id == id }), !playlists[idx].isSystem else { return }
+        playlists[idx].name = name
+        let snapshot = playlists[idx]
+        Task {
+            await persist("renamePlaylist") {
+                try await DatabaseService.shared.updatePlaylist(snapshot)
+            }
+        }
+    }
+
+    func deletePlaylist(id: UUID) {
+        guard let pl = playlists.first(where: { $0.id == id }), !pl.isSystem else { return }
+        playlists.removeAll { $0.id == id }
+        playlistVideos.removeValue(forKey: id)
+        // If it was the active playlist, fall back to the profile's Up Next.
+        if let pIdx = profiles.firstIndex(where: { $0.activePlaylistId == id }) {
+            let sys = playlists.first { $0.profileId == pl.profileId && $0.isSystem }
+            profiles[pIdx].activePlaylistId = sys?.id
+            let profileId = profiles[pIdx].id
+            let fallback = sys?.id
+            Task {
+                await persist("reset active after delete") {
+                    try await DatabaseService.shared.setActivePlaylist(profileId: profileId, playlistId: fallback)
+                }
+            }
+        }
+        Task {
+            await persist("deletePlaylist") {
+                try await DatabaseService.shared.deletePlaylist(id: id)
+            }
+        }
+    }
+
+    func setActivePlaylist(profileId: UUID, playlistId: UUID?) {
+        guard let idx = profiles.firstIndex(where: { $0.id == profileId }) else { return }
+        profiles[idx].activePlaylistId = playlistId
+        Task {
+            await persist("setActivePlaylist") {
+                try await DatabaseService.shared.setActivePlaylist(profileId: profileId, playlistId: playlistId)
+            }
+        }
+    }
+
+    func addToPlaylist(playlistId: UUID, videoId: UUID) {
+        var list = playlistVideos[playlistId] ?? []
+        guard !list.contains(videoId) else { return }   // dedupe
+        let position = list.count
+        list.append(videoId)
+        playlistVideos[playlistId] = list
+        Task {
+            await persist("addToPlaylist") {
+                try await DatabaseService.shared.addVideoToPlaylist(
+                    playlistId: playlistId, videoId: videoId, sortOrder: position
+                )
+            }
+        }
+    }
+
+    func removeFromPlaylist(playlistId: UUID, videoId: UUID) {
+        playlistVideos[playlistId]?.removeAll { $0 == videoId }
+        Task {
+            await persist("removeFromPlaylist") {
+                try await DatabaseService.shared.removeVideoFromPlaylist(
+                    playlistId: playlistId, videoId: videoId
+                )
+            }
+        }
+    }
+
+    func reorderPlaylist(playlistId: UUID, videoIds: [UUID]) {
+        playlistVideos[playlistId] = videoIds
+        Task {
+            await persist("reorderPlaylist") {
+                try await DatabaseService.shared.setPlaylistVideos(playlistId: playlistId, videoIds: videoIds)
+            }
+        }
+    }
+
+    func clearPlaylist(playlistId: UUID) {
+        playlistVideos[playlistId] = []
+        Task {
+            await persist("clearPlaylist") {
+                try await DatabaseService.shared.setPlaylistVideos(playlistId: playlistId, videoIds: [])
             }
         }
     }

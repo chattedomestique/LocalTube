@@ -20,7 +20,20 @@ const MAX_BG_LAYERS = 5
 
 export default function Channel() {
   const { state, nav, navigateTo, send } = useAppStore()
-  const { channels, videos, appMode, activeDownload, activeProfileId, profileFavorites } = state
+  const {
+    channels, videos, appMode, activeDownload, activeProfileId,
+    profileFavorites, isEditing, profiles, playlists, playlistVideos,
+  } = state
+
+  // Active playlist + its membership, for the edit-layer add-to-queue
+  // affordance. Adults curate via the edit layer; kids never see the +.
+  const activeProfileObj = profiles.find(p => p.id === activeProfileId) ?? null
+  const activePlaylistId = activeProfileObj?.activePlaylistId
+  const queueMembership = useMemo(
+    () => new Set(activePlaylistId ? (playlistVideos[activePlaylistId] ?? []) : []),
+    [activePlaylistId, playlistVideos]
+  )
+  const showQueueAffordance = isEditing && !!activePlaylistId
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
   const [favoritesOnly, setFavoritesOnly] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
@@ -464,6 +477,37 @@ export default function Channel() {
 
         {/* Right controls */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {/* Edit-layer toggle — viewer mode + active profile. Enters
+              the edit layer so the parent can add videos to the queue.
+              In edit layer it becomes a Done button. */}
+          {!isEditor && activeProfileId && (
+            isEditing ? (
+              <button
+                className="lt-btn-secondary"
+                onClick={() => send({ type: 'endEditMode' })}
+                style={{ padding: '6px 12px', fontSize: 16, background: 'rgba(155,93,229,0.16)', borderColor: 'rgba(155,93,229,0.36)', color: 'var(--accent)' }}
+                title="Finish editing"
+              >
+                <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+                  <path d="M2.5 6.5L5.5 9.5L10.5 3.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                Done
+              </button>
+            ) : (
+              <button
+                className="lt-btn-secondary"
+                onClick={() => send({ type: 'requestEditMode' })}
+                style={{ padding: '6px 12px', fontSize: 16 }}
+                title="Edit — add videos to the queue"
+              >
+                <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+                  <path d="M9.5 1.5L11.5 3.5L4 11H2V9L9.5 1.5Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" fill="none" />
+                </svg>
+                Edit
+              </button>
+            )
+          )}
+
           {/* Syncing indicator — shown in any mode while sync is running */}
           {isSyncing && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 8, background: 'rgba(155,93,229,0.1)', border: '0.5px solid rgba(155,93,229,0.3)' }}>
@@ -846,6 +890,7 @@ export default function Channel() {
             }}>
               {pagedVideos.map(video => {
                 const isFav = activeProfileId ? favoriteIds.has(video.id) : undefined
+                const inQueue = queueMembership.has(video.id)
                 return (
                   <div key={video.id} data-video-id={video.id} className="reveal">
                     <VideoCard
@@ -853,7 +898,13 @@ export default function Channel() {
                       isEditorMode={isEditor}
                       isActiveDownload={activeDownload?.videoId === video.id}
                       isFavorite={isFav}
-                      onPlay={() => send({ type: 'playVideo', payload: { videoId: video.id } })}
+                      showAddToQueue={showQueueAffordance}
+                      isInQueue={inQueue}
+                      onPlay={() => {
+                        // Block playback while editing the queue.
+                        if (showQueueAffordance) return
+                        send({ type: 'playVideo', payload: { videoId: video.id } })
+                      }}
                       onDelete={isEditor ? () => handleDeleteVideo(video.id) : undefined}
                       onRetry={() => handleRetry(video.id)}
                       onToggleFavorite={
@@ -866,6 +917,17 @@ export default function Channel() {
                                 isFavorite: !isFav,
                               },
                             })
+                          : undefined
+                      }
+                      onAddToQueue={
+                        showQueueAffordance && activePlaylistId
+                          ? () => {
+                              if (inQueue) {
+                                send({ type: 'removeFromPlaylist', payload: { playlistId: activePlaylistId, videoId: video.id } })
+                              } else {
+                                send({ type: 'addToPlaylist', payload: { playlistId: activePlaylistId, videoId: video.id } })
+                              }
+                            }
                           : undefined
                       }
                     />

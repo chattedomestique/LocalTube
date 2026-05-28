@@ -20,6 +20,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let updaterController = SPUStandardUpdaterController(
         startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
 
+    // MARK: - Auto-sync
+    //
+    // Source channels are checked for new uploads on launch and once a day
+    // while the app stays open. The 20h staleness guard means relaunching
+    // within the same day won't re-hit YouTube, while the 24h timer keeps a
+    // long-running install current. Retained for the app's lifetime.
+    private static let autoSyncMaxAge:   TimeInterval = 20 * 60 * 60   // 20 hours
+    private static let autoSyncInterval: TimeInterval = 24 * 60 * 60   // daily
+    private var autoSyncTimer: Timer?
+
     // MARK: - Lifecycle
 
     nonisolated func applicationWillFinishLaunching(_ notification: Notification) {
@@ -55,6 +65,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // After library is loaded, push full state to the WebView
             windowController.bridge.emitter.emitStateUpdate(appState)
 
+            // Check source channels for new uploads now (launch), then daily.
+            await appState.autoSyncStaleChannels(maxAge: Self.autoSyncMaxAge)
+            windowController.bridge.emitter.emitStateUpdate(appState)
+            scheduleDailyAutoSync()
+        }
+    }
+
+    /// Schedules the once-a-day background check for new uploads. Runs only
+    /// while the app stays open; the launch-time check covers fresh starts.
+    private func scheduleDailyAutoSync() {
+        autoSyncTimer?.invalidate()
+        autoSyncTimer = Timer.scheduledTimer(
+            withTimeInterval: Self.autoSyncInterval, repeats: true
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self, let appState = self.appState else { return }
+                await appState.autoSyncStaleChannels(maxAge: Self.autoSyncMaxAge)
+                self.windowController?.bridge.emitter.emitStateUpdate(appState)
+            }
         }
     }
 

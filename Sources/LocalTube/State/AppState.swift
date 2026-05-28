@@ -402,6 +402,29 @@ final class AppState {
         }
     }
 
+    /// Auto-checks source channels for newly uploaded videos. Syncs only
+    /// channels whose last successful sync is older than `maxAge` (or that
+    /// have never synced), one at a time so we never spawn a burst of yt-dlp
+    /// processes. Each `syncChannel` adds just the new videos, enqueues their
+    /// downloads, and posts `.channelSyncStateChanged` so the UI keeps up.
+    /// Driven on launch and on a daily timer (see AppDelegate).
+    func autoSyncStaleChannels(maxAge: TimeInterval) async {
+        let now = Date()
+        let due = channels.filter { ch in
+            guard ch.type == .source, ch.youtubeChannelId?.isEmpty == false else { return false }
+            guard let last = ch.lastSyncedAt else { return true }   // never synced → due
+            return now.timeIntervalSince(last) >= maxAge
+        }
+        guard !due.isEmpty else {
+            AppLogger.info("Auto-sync: no source channels due for refresh")
+            return
+        }
+        AppLogger.info("Auto-sync: refreshing \(due.count) source channel(s) for new uploads")
+        for channel in due {
+            await syncChannel(channel)
+        }
+    }
+
     // MARK: - Download
 
     var activeDownload: DownloadQueueItem? {

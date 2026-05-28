@@ -111,6 +111,10 @@ export interface AppState {
   /** playlistId → ordered video ids. */
   playlistVideos: Record<string, string[]>
   activeProfileId?: string
+  /** The video currently playing in the floating player (Phase 4). Drives
+      the now-playing highlight in the queue tray. Undefined when the
+      player is closed. */
+  nowPlayingVideoId?: string
 }
 
 // ─── Bridge Events (Swift → JS) ────────────────────────────────────────────
@@ -144,11 +148,13 @@ export type BridgeEvent =
   | { type: 'playlistRemoved';        payload: { playlistId: string } }
   | { type: 'playlistVideosUpdated';  payload: { playlistId: string; videoIds: string[] } }
   | { type: 'activePlaylistChanged';  payload: { profileId: string; activePlaylistId: string | null } }
+  | { type: 'nowPlayingChanged';      payload: { videoId: string | null } }
+  | { type: 'autoPlaybackModeChanged'; payload: { profileId: string; mode: string } }
 
 // ─── Bridge Messages (JS → Swift) ─────────────────────────────────────────
 export type BridgeMessage =
   | { type: 'getState' }
-  | { type: 'playVideo';        payload: { videoId: string } }
+  | { type: 'playVideo';        payload: { videoId: string; source?: 'channel' | 'queue'; contextId?: string } }
   | { type: 'stopPlayer' }
   | { type: 'openFolderPicker' }
   | { type: 'validatePIN';      payload: { pin: string } }
@@ -183,6 +189,7 @@ export type BridgeMessage =
   | { type: 'removeFromPlaylist';  payload: { playlistId: string; videoId: string } }
   | { type: 'reorderPlaylist';     payload: { playlistId: string; videoIds: string[] } }
   | { type: 'clearPlaylist';       payload: { playlistId: string } }
+  | { type: 'setAutoPlaybackMode'; payload: { profileId: string; mode: string } }
 
 // ─── Navigation ────────────────────────────────────────────────────────────
 export type NavScreen = 'library' | 'channel' | 'settings' | 'editor' | 'profiles'

@@ -15,6 +15,29 @@ enum PendingPinAction: Sendable {
     case edit
 }
 
+/// What happens when a channel-initiated video ends. Per profile;
+/// stored on `profiles.auto_playback_mode`. Queue playback ignores this
+/// (it always advances to the next queued item).
+enum PlaybackMode: String, CaseIterable, Sendable {
+    case exit          // return to channel view (default)
+    case sequential    // play the next video in the channel
+    case repeatOne     // replay the same video
+    case random        // play a random video from the channel
+
+    var next: PlaybackMode {
+        let all = PlaybackMode.allCases
+        let idx = all.firstIndex(of: self) ?? 0
+        return all[(idx + 1) % all.count]
+    }
+}
+
+/// Where the current playback originated, which drives end-of-video
+/// behaviour. Channel → apply PlaybackMode. Queue → advance the queue.
+enum PlaybackSource: Sendable, Equatable {
+    case channel(UUID)
+    case queue(UUID)   // playlist id
+}
+
 // MARK: - Navigation Destination
 
 enum ViewerDestination: Hashable {
@@ -207,6 +230,18 @@ final class AppState {
     func removeFromPlaylist(playlistId: UUID, videoId: UUID) { library.removeFromPlaylist(playlistId: playlistId, videoId: videoId) }
     func reorderPlaylist(playlistId: UUID, videoIds: [UUID]) { library.reorderPlaylist(playlistId: playlistId, videoIds: videoIds) }
     func clearPlaylist(playlistId: UUID)                    { library.clearPlaylist(playlistId: playlistId) }
+
+    /// The active profile's channel-playback mode (defaults to .exit).
+    var activeProfileAutoPlaybackMode: PlaybackMode {
+        guard let pid = activeProfileId,
+              let p = profiles.first(where: { $0.id == pid }),
+              let raw = p.autoPlaybackMode,
+              let mode = PlaybackMode(rawValue: raw) else { return .exit }
+        return mode
+    }
+    func setAutoPlaybackMode(profileId: UUID, mode: PlaybackMode) {
+        library.setAutoPlaybackMode(profileId: profileId, mode: mode.rawValue)
+    }
 
     func addChannel(_ channel: Channel)         { library.addChannel(channel) }
     func removeChannel(id: UUID, registerRedo: Bool = false) {

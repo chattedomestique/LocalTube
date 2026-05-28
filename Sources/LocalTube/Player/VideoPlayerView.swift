@@ -354,6 +354,9 @@ private struct GlassBackButton: View {
 struct PlayerControlsOverlay: View {
     @Environment(PlayerState.self) private var playerState
     var onBack: () -> Void
+    /// Cycles the active profile's channel-playback mode. When nil (e.g. the
+    /// pure-SwiftUI viewer path) the autoplay button is hidden.
+    var onCycleAutoplay: (() -> Void)? = nil
 
     var body: some View {
         ZStack {
@@ -428,6 +431,7 @@ struct PlayerControlsOverlay: View {
                             .font(.system(size: 18))
                             .foregroundStyle(Color.white.opacity(0.6))
                         Spacer()
+                        autoplayButton
                         loopButton
                     }
                 }
@@ -462,4 +466,60 @@ struct PlayerControlsOverlay: View {
         .accessibilityLabel(playerState.isLooping ? "Loop on" : "Loop off")
     }
 
+    // MARK: - Autoplay Button
+    //
+    // Cycles the active profile's channel-playback mode. Reads the current
+    // mode live from appState (via PlayerState) so the icon/label reflect
+    // the latest value; the time labels re-render the overlay every 0.5 s
+    // so it stays fresh even if Observation misses the cross-object read.
+
+    @ViewBuilder private var autoplayButton: some View {
+        if let onCycleAutoplay, playerState.appState?.activeProfileId != nil {
+            let mode = playerState.appState?.activeProfileAutoPlaybackMode ?? .exit
+            Button(action: onCycleAutoplay) {
+                HStack(spacing: 6) {
+                    Image(systemName: mode.iconName)
+                        .font(.system(size: 16, weight: .semibold))
+                        .contentTransition(.symbolEffect(.replace))
+                    Text(mode.label)
+                        .font(.system(size: 14, weight: .semibold))
+                }
+                .foregroundStyle(mode == .exit ? Color.white.opacity(0.55) : Color.ltAccent)
+                .padding(.horizontal, 12)
+                .frame(height: 36)
+                .background(
+                    RoundedRectangle(cornerRadius: 9)
+                        .fill(Color.white.opacity(mode == .exit ? 0.06 : 0.14))
+                )
+            }
+            .buttonStyle(.plain)
+            .help("Autoplay: \(mode.label)")
+            .accessibilityLabel("Autoplay \(mode.label)")
+        }
+    }
+
+}
+
+// MARK: - PlaybackMode UI mapping
+
+private extension PlaybackMode {
+    /// SF Symbol shown on the player's autoplay button.
+    var iconName: String {
+        switch self {
+        case .exit:       return "arrow.uturn.left"
+        case .sequential: return "forward.end.fill"
+        case .repeatOne:  return "repeat.1"
+        case .random:     return "shuffle"
+        }
+    }
+
+    /// Short label shown next to the icon.
+    var label: String {
+        switch self {
+        case .exit:       return "Off"
+        case .sequential: return "Next"
+        case .repeatOne:  return "Repeat"
+        case .random:     return "Shuffle"
+        }
+    }
 }

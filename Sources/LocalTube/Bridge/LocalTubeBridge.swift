@@ -78,7 +78,20 @@ final class LocalTubeBridge: NSObject, WKScriptMessageHandler {
         case .removeFromPlaylist:  handleRemoveFromPlaylist(payloadDict)
         case .reorderPlaylist:     handleReorderPlaylist(payloadDict)
         case .clearPlaylist:       handleClearPlaylist(payloadDict)
+        case .setAutoPlaybackMode: handleSetAutoPlaybackMode(payloadDict)
         }
+    }
+
+    // MARK: - Playback
+
+    private func handleSetAutoPlaybackMode(_ payload: [String: Any]) {
+        guard let appState,
+              let pidStr = payload["profileId"] as? String,
+              let pid = UUID(uuidString: pidStr),
+              let modeStr = payload["mode"] as? String,
+              let mode = PlaybackMode(rawValue: modeStr) else { return }
+        appState.setAutoPlaybackMode(profileId: pid, mode: mode)
+        emitter.emitAutoPlaybackModeChanged(profileId: pid, mode: mode.rawValue)
     }
 
     // MARK: - Playlists
@@ -218,7 +231,22 @@ final class LocalTubeBridge: NSObject, WKScriptMessageHandler {
               let videoId    = UUID(uuidString: videoIdStr),
               let appState,
               let video      = appState.videoById(videoId) else { return }
-        playerOverlayController?.show(video: video, appState: appState)
+
+        // Resolve the playback source. `source` is "queue" or "channel" and
+        // `contextId` is the playlist/channel UUID. Falls back to the
+        // video's own channel so older call sites keep working.
+        let source: PlaybackSource = {
+            let sourceStr = payload["source"] as? String
+            let contextId = (payload["contextId"] as? String).flatMap(UUID.init(uuidString:))
+            switch sourceStr {
+            case "queue":   if let id = contextId { return .queue(id) }
+            case "channel": if let id = contextId { return .channel(id) }
+            default: break
+            }
+            return .channel(video.channelId)
+        }()
+
+        playerOverlayController?.show(video: video, appState: appState, source: source)
     }
 
     private func handleStopPlayer() {

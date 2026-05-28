@@ -36,6 +36,7 @@ const defaultState: AppState = {
   playlists: [],
   playlistVideos: {},
   activeProfileId: undefined,
+  nowPlayingVideoId: undefined,
 }
 
 // ─── Store Shape ───────────────────────────────────────────────────────────
@@ -311,6 +312,19 @@ function applyBridgeEvent(app: AppState, event: BridgeEvent): AppState {
           p.id === profileId
             ? { ...p, activePlaylistId: activePlaylistId ?? undefined }
             : p
+        ),
+      }
+    }
+    // ── Playback events ───────────────────────────────────────────────────
+    case 'nowPlayingChanged': {
+      return { ...app, nowPlayingVideoId: event.payload.videoId ?? undefined }
+    }
+    case 'autoPlaybackModeChanged': {
+      const { profileId, mode } = event.payload
+      return {
+        ...app,
+        profiles: app.profiles.map(p =>
+          p.id === profileId ? { ...p, autoPlaybackMode: mode } : p
         ),
       }
     }

@@ -333,6 +333,21 @@ actor DatabaseService {
         }
     }
 
+    func setAutoPlaybackMode(profileId: UUID, mode: String) throws {
+        guard let db = db else { throw DatabaseError.openFailed("Not opened") }
+        let sql = "UPDATE profiles SET auto_playback_mode=? WHERE id=?;"
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            throw DatabaseError.prepareFailed(String(cString: sqlite3_errmsg(db)))
+        }
+        defer { sqlite3_finalize(stmt) }
+        bind(stmt: stmt!, index: 1, text: mode)
+        bind(stmt: stmt!, index: 2, text: profileId.uuidString)
+        guard sqlite3_step(stmt) == SQLITE_DONE else {
+            throw DatabaseError.execFailed(String(cString: sqlite3_errmsg(db)))
+        }
+    }
+
     // MARK: - Playlists
 
     func fetchAllPlaylists() throws -> [Playlist] {

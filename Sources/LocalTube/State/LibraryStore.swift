@@ -219,6 +219,16 @@ final class LibraryStore {
         }
     }
 
+    func setAutoPlaybackMode(profileId: UUID, mode: String) {
+        guard let idx = profiles.firstIndex(where: { $0.id == profileId }) else { return }
+        profiles[idx].autoPlaybackMode = mode
+        Task {
+            await persist("setAutoPlaybackMode") {
+                try await DatabaseService.shared.setAutoPlaybackMode(profileId: profileId, mode: mode)
+            }
+        }
+    }
+
     func addToPlaylist(playlistId: UUID, videoId: UUID) {
         var list = playlistVideos[playlistId] ?? []
         guard !list.contains(videoId) else { return }   // dedupe

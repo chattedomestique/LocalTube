@@ -177,6 +177,26 @@ final class BridgeEventEmitter {
             "activePlaylistId": activePlaylistId?.uuidString as Any,
         ])
     }
+
+    // MARK: - Playback diff emitters
+
+    /// The video currently playing in the floating player, or nil when the
+    /// player closes. Drives the now-playing highlight in the queue tray.
+    func emitNowPlayingChanged(videoId: UUID?) {
+        emit("nowPlayingChanged", payload: [
+            "videoId": videoId?.uuidString as Any,
+        ])
+    }
+
+    /// The active profile's channel-playback mode changed (from the player
+    /// overlay's autoplay button). Mirrors `setAutoPlaybackMode` so any
+    /// open React surface stays in sync.
+    func emitAutoPlaybackModeChanged(profileId: UUID, mode: String) {
+        emit("autoPlaybackModeChanged", payload: [
+            "profileId": profileId.uuidString,
+            "mode":      mode,
+        ])
+    }
 }
 
 extension Playlist {

@@ -344,6 +344,14 @@ export default function Library() {
           <TabBtn label="Playlists" active={tab === 'playlists'} onClick={() => setTab('playlists')} />
           <TabBtn label="Feed"      active={tab === 'feed'}      onClick={() => setTab('feed')} />
           <div style={{ flex: 1 }} />
+          {showEditAffordances && (
+            <AutoplayPicker
+              value={activeProfile.autoPlaybackMode ?? 'exit'}
+              onChange={(mode) =>
+                send({ type: 'setAutoPlaybackMode', payload: { profileId: activeProfile.id, mode } })
+              }
+            />
+          )}
           {tab === 'channels' && visibleChannels.length > 0 && (
             <SortDropdown value={sort} onChange={setSort} />
           )}
@@ -450,7 +458,7 @@ export default function Library() {
           <FeedTab
             channels={visibleChannels}
             videos={videos}
-            onPlay={(videoId) => send({ type: 'playVideo', payload: { videoId } })}
+            onPlay={(videoId, channelId) => send({ type: 'playVideo', payload: { videoId, source: 'channel', contextId: channelId } })}
           />
         )}
       </div>
@@ -524,6 +532,43 @@ function SortDropdown({ value, onChange }: { value: ChannelSort; onChange: (s: C
       >
         {(Object.keys(SORT_LABELS) as ChannelSort[]).map(s => (
           <option key={s} value={s}>{SORT_LABELS[s]}</option>
+        ))}
+      </select>
+    </label>
+  )
+}
+
+// ─── Autoplay picker (edit layer) ─────────────────────────────────────────────
+// Per-profile channel-playback behaviour. Adults set this in the edit
+// layer; it governs what happens when a channel-launched video ends.
+const AUTOPLAY_LABELS: Record<string, string> = {
+  exit:       'Off — back to channel',
+  sequential: 'Play next',
+  repeatOne:  'Repeat one',
+  random:     'Shuffle',
+}
+function AutoplayPicker({ value, onChange }: { value: string; onChange: (mode: string) => void }) {
+  const safe = AUTOPLAY_LABELS[value] ? value : 'exit'
+  return (
+    <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text-secondary)' }}>
+      <span>Autoplay:</span>
+      <select
+        value={safe}
+        onChange={e => onChange(e.target.value)}
+        style={{
+          background: 'rgba(255,255,255,0.05)',
+          border: '1px solid rgba(255,255,255,0.12)',
+          borderRadius: 8,
+          color: 'var(--text-primary)',
+          fontSize: 13,
+          fontWeight: 600,
+          padding: '6px 10px',
+          cursor: 'pointer',
+          outline: 'none',
+        }}
+      >
+        {Object.keys(AUTOPLAY_LABELS).map(m => (
+          <option key={m} value={m}>{AUTOPLAY_LABELS[m]}</option>
         ))}
       </select>
     </label>
@@ -620,7 +665,7 @@ function FeedTab({
 }: {
   channels: Channel[]
   videos: Record<string, Video[]>
-  onPlay: (videoId: string) => void
+  onPlay: (videoId: string, channelId: string) => void
 }) {
   const rows = useMemo(() => {
     const all: { video: Video; channel: Channel; ts: number }[] = []
@@ -659,7 +704,7 @@ function FeedTab({
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxWidth: 920 }}>
       <h2 style={{ fontSize: 28, fontWeight: 800, marginBottom: 12 }}>Recently added</h2>
       {rows.map(({ video, channel, ts }) => (
-        <FeedRow key={video.id} video={video} channel={channel} ts={ts} onPlay={() => onPlay(video.id)} />
+        <FeedRow key={video.id} video={video} channel={channel} ts={ts} onPlay={() => onPlay(video.id, channel.id)} />
       ))}
     </div>
   )

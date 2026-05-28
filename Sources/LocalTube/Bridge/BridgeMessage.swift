@@ -44,6 +44,8 @@ enum BridgeMessageType: String, Decodable {
     case removeFromPlaylist
     case reorderPlaylist
     case clearPlaylist
+    // Playback
+    case setAutoPlaybackMode
 }
 
 struct BridgeMessage: Decodable {

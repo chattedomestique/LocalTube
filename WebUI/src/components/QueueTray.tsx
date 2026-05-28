@@ -28,7 +28,7 @@ function formatDuration(seconds: number): string {
 
 export default function QueueTray() {
   const { state, send } = useAppStore()
-  const { activeProfileId, profiles, playlists, playlistVideos, videos, isEditing } = state
+  const { activeProfileId, profiles, playlists, playlistVideos, videos, isEditing, nowPlayingVideoId } = state
 
   const [open, setOpen] = useState(false)
   const [showClearConfirm, setShowClearConfirm] = useState(false)
@@ -260,9 +260,10 @@ export default function QueueTray() {
                       video={video}
                       duration={formatDuration(video.durationSeconds)}
                       canEdit={canEdit}
+                      isNowPlaying={!canEdit && video.id === nowPlayingVideoId}
                       onPlay={() => {
                         if (canEdit) return
-                        send({ type: 'playVideo', payload: { videoId: video.id } })
+                        send({ type: 'playVideo', payload: { videoId: video.id, source: 'queue', contextId: activePlaylist.id } })
                       }}
                       onRemove={() => removeVideo(video.id)}
                     />
@@ -312,11 +313,12 @@ export default function QueueTray() {
 }
 
 function QueueRow({
-  video, duration, canEdit, onPlay, onRemove,
+  video, duration, canEdit, isNowPlaying, onPlay, onRemove,
 }: {
   video: Video
   duration: string
   canEdit: boolean
+  isNowPlaying: boolean
   onPlay: () => void
   onRemove: () => void
 }) {
@@ -332,9 +334,12 @@ function QueueRow({
         gap: 10,
         padding: 8,
         borderRadius: 10,
-        background: hover && !canEdit ? 'rgba(255,255,255,0.06)' : 'transparent',
+        background: isNowPlaying
+          ? 'rgba(155,93,229,0.16)'
+          : hover && !canEdit ? 'rgba(255,255,255,0.06)' : 'transparent',
+        boxShadow: isNowPlaying ? 'inset 0 0 0 1px rgba(155,93,229,0.4)' : 'none',
         cursor: canEdit ? 'grab' : 'pointer',
-        transition: 'background 140ms ease',
+        transition: 'background 140ms ease, box-shadow 140ms ease',
       }}
     >
       {canEdit && (
@@ -352,6 +357,25 @@ function QueueRow({
       }}>
         {video.thumbnailPath && (
           <Thumb video={video} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        )}
+        {isNowPlaying && (
+          <div style={{
+            position: 'absolute', inset: 0,
+            background: 'rgba(0,0,0,0.45)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3,
+          }}>
+            {[0, 1, 2].map(i => (
+              <span
+                key={i}
+                className="lt-eq-bar"
+                style={{
+                  width: 3, height: 16, borderRadius: 2,
+                  background: 'var(--accent)',
+                  animationDelay: `${i * 0.18}s`,
+                }}
+              />
+            ))}
+          </div>
         )}
         {duration && (
           <div style={{

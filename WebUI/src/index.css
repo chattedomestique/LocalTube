@@ -359,6 +359,16 @@ p {
   animation: pulse-glow 1.5s ease-in-out infinite;
 }
 
+/* ─── Now-playing equalizer ───────────────────────────────────────────────── */
+@keyframes lt-eq {
+  0%, 100% { transform: scaleY(0.35); }
+  50%      { transform: scaleY(1); }
+}
+.lt-eq-bar {
+  transform-origin: bottom;
+  animation: lt-eq 0.9s ease-in-out infinite;
+}
+
 /* ─── Modal Overlay ───────────────────────────────────────────────────────── */
 .modal-backdrop {
   position: fixed;

@@ -131,6 +131,8 @@ final class WebWindowController: NSObject, NSWindowDelegate {
         bridge.appState = appState
         bridge.playerOverlayController = playerOverlay
         bridge.emitter.webView = webView
+        // Let the overlay push now-playing / autoplay diffs back to React.
+        playerOverlay.emitter = bridge.emitter
 
         self.window  = window
         self.webView = webView

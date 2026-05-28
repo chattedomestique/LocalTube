@@ -903,7 +903,7 @@ export default function Channel() {
                       onPlay={() => {
                         // Block playback while editing the queue.
                         if (showQueueAffordance) return
-                        send({ type: 'playVideo', payload: { videoId: video.id } })
+                        send({ type: 'playVideo', payload: { videoId: video.id, source: 'channel', contextId: channel.id } })
                       }}
                       onDelete={isEditor ? () => handleDeleteVideo(video.id) : undefined}
                       onRetry={() => handleRetry(video.id)}
@@ -977,7 +977,7 @@ export default function Channel() {
                 video={video}
                 isEditorMode={isEditor}
                 isActiveDownload={activeDownload?.videoId === video.id}
-                onPlay={() => send({ type: 'playVideo', payload: { videoId: video.id } })}
+                onPlay={() => send({ type: 'playVideo', payload: { videoId: video.id, source: 'channel', contextId: channel.id } })}
                 onDelete={isEditor ? () => handleDeleteVideo(video.id) : undefined}
                 onRetry={() => handleRetry(video.id)}
               />

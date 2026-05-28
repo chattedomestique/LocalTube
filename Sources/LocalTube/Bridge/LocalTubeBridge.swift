@@ -393,6 +393,21 @@ final class LocalTubeBridge: NSObject, WKScriptMessageHandler {
         )
         appState.addChannel(channel)
         emitter.emitChannelUpserted(channel)
+
+        // A "source" channel exists to mirror a YouTube channel, so grab its
+        // videos immediately instead of leaving an empty channel that needs a
+        // separate, easily-missed manual Sync. syncChannel awaits the network
+        // video-list fetch before inserting any rows, so the channel's own DB
+        // insert (kicked off just above) always lands first — no FK race.
+        // It also posts .channelSyncStateChanged, which drives the live
+        // "Syncing…" indicator; we emit a full state update when it finishes.
+        if channelType == .source, let ytId, !ytId.isEmpty {
+            Task { [weak self] in
+                guard let self, let appState = self.appState else { return }
+                await appState.syncChannel(channel)
+                self.emitter.emitStateUpdate(appState)
+            }
+        }
     }
 
     private func handleDeleteChannel(_ payload: [String: Any]) {

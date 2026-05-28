@@ -3,6 +3,7 @@ import { useAppStore } from '../store'
 import ChannelCard from '../components/ChannelCard'
 import ProfileAvatar from '../components/ProfileAvatar'
 import AmbientBackground from '../components/AmbientBackground'
+import LtSelect from '../components/LtSelect'
 import { Thumb } from '../components/VideoCard'
 import type { Channel, Profile, Video } from '../types'
 
@@ -328,7 +329,7 @@ export default function Library() {
       {activeProfile && (
         <div style={{
           position: 'relative',
-          zIndex: 1,
+          zIndex: 5,
           display: 'flex',
           alignItems: 'center',
           padding: '0 40px',
@@ -506,72 +507,54 @@ function TabBtn({ label, active, onClick }: { label: string; active: boolean; on
 }
 
 // ─── Sort dropdown ────────────────────────────────────────────────────────────
-const SORT_LABELS: Record<ChannelSort, string> = {
-  custom: 'Custom',
-  name:   'Name',
-  recent: 'Recently updated',
-}
+const SORT_OPTIONS: { value: ChannelSort; label: string }[] = [
+  { value: 'custom', label: 'Custom' },
+  { value: 'name',   label: 'Name (A–Z)' },
+  { value: 'recent', label: 'Recently updated' },
+]
 function SortDropdown({ value, onChange }: { value: ChannelSort; onChange: (s: ChannelSort) => void }) {
   return (
-    <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text-secondary)' }}>
-      <span>Sort:</span>
-      <select
-        value={value}
-        onChange={e => onChange(e.target.value as ChannelSort)}
-        style={{
-          background: 'rgba(255,255,255,0.05)',
-          border: '1px solid rgba(255,255,255,0.12)',
-          borderRadius: 8,
-          color: 'var(--text-primary)',
-          fontSize: 13,
-          fontWeight: 600,
-          padding: '6px 10px',
-          cursor: 'pointer',
-          outline: 'none',
-        }}
-      >
-        {(Object.keys(SORT_LABELS) as ChannelSort[]).map(s => (
-          <option key={s} value={s}>{SORT_LABELS[s]}</option>
-        ))}
-      </select>
-    </label>
+    <LtSelect
+      value={value}
+      options={SORT_OPTIONS}
+      onChange={v => onChange(v as ChannelSort)}
+      label="Sort"
+      minWidth={170}
+      align="right"
+      icon={(
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+          <path d="M3 3.5H11M3.5 7H10.5M5 10.5H9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+        </svg>
+      )}
+    />
   )
 }
 
 // ─── Autoplay picker (edit layer) ─────────────────────────────────────────────
 // Per-profile channel-playback behaviour. Adults set this in the edit
 // layer; it governs what happens when a channel-launched video ends.
-const AUTOPLAY_LABELS: Record<string, string> = {
-  exit:       'Off — back to channel',
-  sequential: 'Play next',
-  repeatOne:  'Repeat one',
-  random:     'Shuffle',
-}
+const AUTOPLAY_OPTIONS: { value: string; label: string }[] = [
+  { value: 'exit',       label: 'Off — back to channel' },
+  { value: 'sequential', label: 'Play next' },
+  { value: 'repeatOne',  label: 'Repeat one' },
+  { value: 'random',     label: 'Shuffle' },
+]
 function AutoplayPicker({ value, onChange }: { value: string; onChange: (mode: string) => void }) {
-  const safe = AUTOPLAY_LABELS[value] ? value : 'exit'
+  const safe = AUTOPLAY_OPTIONS.some(o => o.value === value) ? value : 'exit'
   return (
-    <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text-secondary)' }}>
-      <span>Autoplay:</span>
-      <select
-        value={safe}
-        onChange={e => onChange(e.target.value)}
-        style={{
-          background: 'rgba(255,255,255,0.05)',
-          border: '1px solid rgba(255,255,255,0.12)',
-          borderRadius: 8,
-          color: 'var(--text-primary)',
-          fontSize: 13,
-          fontWeight: 600,
-          padding: '6px 10px',
-          cursor: 'pointer',
-          outline: 'none',
-        }}
-      >
-        {Object.keys(AUTOPLAY_LABELS).map(m => (
-          <option key={m} value={m}>{AUTOPLAY_LABELS[m]}</option>
-        ))}
-      </select>
-    </label>
+    <LtSelect
+      value={safe}
+      options={AUTOPLAY_OPTIONS}
+      onChange={onChange}
+      label="Autoplay"
+      minWidth={210}
+      align="right"
+      icon={(
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+          <path d="M4 3L11 7L4 11V3Z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" fill="none" />
+        </svg>
+      )}
+    />
   )
 }
 

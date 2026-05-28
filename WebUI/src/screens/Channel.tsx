@@ -1,8 +1,27 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { useAppStore } from '../store'
 import VideoCard, { Thumb } from '../components/VideoCard'
+import LtSelect from '../components/LtSelect'
 import type { Video } from '../types'
 import { thumbUrl } from '../utils'
+
+// Video sort modes for the channel grid/list. Persisted per-app in
+// localStorage so the choice survives navigation.
+type VideoSort = 'default' | 'newest' | 'oldest' | 'title' | 'longest' | 'shortest'
+const VIDEO_SORT_KEY = 'lt-video-sort'
+const VIDEO_SORT_OPTIONS: { value: VideoSort; label: string }[] = [
+  { value: 'default',  label: 'Default order' },
+  { value: 'newest',   label: 'Newest first' },
+  { value: 'oldest',   label: 'Oldest first' },
+  { value: 'title',    label: 'Title (A–Z)' },
+  { value: 'longest',  label: 'Longest' },
+  { value: 'shortest', label: 'Shortest' },
+]
+function readVideoSort(): VideoSort {
+  const v = localStorage.getItem(VIDEO_SORT_KEY)
+  return VIDEO_SORT_OPTIONS.some(o => o.value === v) ? (v as VideoSort) : 'default'
+}
+const videoDate = (v: Video) => (v.downloadedAt ? Date.parse(v.downloadedAt) : 0)
 
 // Banner collapse tuning — full banner at scrollTop=0, fully gone by
 // COLLAPSE_DISTANCE. Easing is applied to the raw progress so the early
@@ -46,6 +65,8 @@ export default function Channel() {
   })
   const [currentPage, setCurrentPage] = useState(0)
   const [searchQuery, setSearchQuery] = useState('')
+  const [videoSort, setVideoSort] = useState<VideoSort>(readVideoSort)
+  useEffect(() => { localStorage.setItem(VIDEO_SORT_KEY, videoSort) }, [videoSort])
   const scrollRef = useRef<HTMLDivElement>(null)
 
   // The banner lives inside the scroll container as the first child so it
@@ -127,10 +148,17 @@ export default function Channel() {
     return () => observer.disconnect()
   }, [bannerPath])
 
-  const sortedVideos = useMemo(
-    () => [...channelVideos].sort((a, b) => a.sortOrder - b.sortOrder),
-    [channelVideos]
-  )
+  const sortedVideos = useMemo(() => {
+    const list = [...channelVideos]
+    switch (videoSort) {
+      case 'newest':   return list.sort((a, b) => videoDate(b) - videoDate(a))
+      case 'oldest':   return list.sort((a, b) => videoDate(a) - videoDate(b))
+      case 'title':    return list.sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base' }))
+      case 'longest':  return list.sort((a, b) => (b.durationSeconds || 0) - (a.durationSeconds || 0))
+      case 'shortest': return list.sort((a, b) => (a.durationSeconds || 0) - (b.durationSeconds || 0))
+      default:         return list.sort((a, b) => a.sortOrder - b.sortOrder)
+    }
+  }, [channelVideos, videoSort])
   const isSyncing = channel ? (state.syncingChannelIds ?? []).includes(channel.id) : false
 
   if (!channel) {
@@ -708,10 +736,12 @@ export default function Channel() {
           WebkitBackdropFilter: 'blur(16px)',
           borderBottom: '0.5px solid rgba(255,255,255,0.07)',
         }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, justifyContent: 'space-between' }}>
           <div style={{
             display: 'flex',
             alignItems: 'center',
             gap: 10,
+            flex: 1,
             background: 'rgba(255,255,255,0.06)',
             border: `0.5px solid ${searchQuery ? 'rgba(155,93,229,0.5)' : 'rgba(255,255,255,0.1)'}`,
             borderRadius: 10,
@@ -757,8 +787,23 @@ export default function Channel() {
               </button>
             )}
           </div>
+          {/* Video sorter — visible to everyone, latches in the sticky bar */}
+          <LtSelect
+            value={videoSort}
+            options={VIDEO_SORT_OPTIONS}
+            onChange={(v) => setVideoSort(v as VideoSort)}
+            label="Sort"
+            minWidth={172}
+            align="right"
+            icon={(
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <path d="M3 3.5H11M3.5 7H10.5M5 10.5H9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+              </svg>
+            )}
+          />
+          </div>
           {searchQuery && (
-            <p style={{ margin: '6px 0 0', fontSize: 13, color: 'var(--text-tertiary)' }}>
+            <p style={{ margin: '8px 0 0', fontSize: 13, color: 'var(--text-tertiary)' }}>
               {filteredVideos.length} result{filteredVideos.length !== 1 ? 's' : ''} for "{searchQuery}"
             </p>
           )}

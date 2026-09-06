@@ -5,6 +5,7 @@ import Foundation
 //
 // Calls window.LocalTubeBridge.dispatch(event, payload) in the WKWebView.
 // All calls must happen on the main thread (WKWebView requirement).
+// Mirror any new event in WebUI/src/types.ts (BridgeEvent).
 
 @MainActor
 final class BridgeEventEmitter {
@@ -27,7 +28,11 @@ final class BridgeEventEmitter {
         //   makes the base64 payload pure ASCII, so atob() + JSON.parse()
         //   always round-trip correctly — no TextDecoder workaround needed.
         let envelope: [String: Any] = ["type": event, "payload": payload]
-        guard let jsonData = try? JSONSerialization.data(withJSONObject: envelope) else { return }
+        guard JSONSerialization.isValidJSONObject(envelope),
+              let jsonData = try? JSONSerialization.data(withJSONObject: envelope) else {
+            AppLogger.error("BridgeEventEmitter [\(event)]: payload is not valid JSON")
+            return
+        }
         let asciiJSON = jsonData.asciiSafeJSONString
         let base64 = Data(asciiJSON.utf8).base64EncodedString()
 
@@ -70,11 +75,47 @@ final class BridgeEventEmitter {
         emit("folderSelected", payload: ["path": path])
     }
 
-    func emitPINValidated(valid: Bool) {
-        emit("pinValidated", payload: ["valid": valid])
+    /// `lockoutSeconds` > 0 means further attempts are refused for that
+    /// long (rate limiting after repeated failures).
+    func emitPINValidated(valid: Bool, lockoutSeconds: Int = 0) {
+        emit("pinValidated", payload: ["valid": valid, "lockoutSeconds": max(0, lockoutSeconds)])
+    }
+
+    /// Transient, non-state message for the UI to show briefly.
+    /// kind: "info" | "success" | "warning" | "error"
+    func emitToast(_ message: String, kind: String = "info") {
+        emit("toast", payload: ["message": message, "kind": kind])
     }
 
     // emitEditorTimerTick removed with the auto-lock timer.
+
+    // MARK: - Library management emitters
+
+    /// Reply to `chooseLibraryFolder`. `analysis == nil` means the user
+    /// cancelled the picker.
+    func emitLibraryFolderPicked(analysis: LibraryFolderAnalysis?) {
+        if let analysis {
+            emit("libraryFolderPicked", payload: ["cancelled": false, "analysis": analysis.bridgePayload()])
+        } else {
+            emit("libraryFolderPicked", payload: ["cancelled": true])
+        }
+    }
+
+    func emitLibraryRelocationProgress(done: Int, total: Int, channel: String) {
+        emit("libraryRelocationProgress", payload: ["done": done, "total": total, "channel": channel])
+    }
+
+    func emitLibraryRelocated(result: LibraryRelocationResult) {
+        emit("libraryRelocated", payload: result.bridgePayload())
+    }
+
+    func emitLibraryScanStarted() {
+        emit("libraryScanStarted")
+    }
+
+    func emitLibraryScanCompleted(result: LibraryScanResult) {
+        emit("libraryScanCompleted", payload: result.bridgePayload())
+    }
 
     // MARK: - Targeted diff emitters
     //
@@ -219,6 +260,23 @@ private let sharedISO8601Formatter: ISO8601DateFormatter = {
     return f
 }()
 
+// MARK: - Thumbnail URL helper
+//
+// Builds a `localtube-thumb://` URL from an absolute file path. The path
+// is percent-encoded so folders containing '#', '?', '%' or spaces don't
+// break the URL (a root folder named "Kids #1" used to truncate every
+// thumbnail path at the '#'). ThumbnailURLSchemeHandler decodes it back
+// via `URL.path`.
+
+private func thumbURL(forPath path: String, version: Int? = nil) -> String {
+    guard !path.isEmpty else { return "" }
+    let encoded = path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? path
+    if let version {
+        return "localtube-thumb://\(encoded)?v=\(version)"
+    }
+    return "localtube-thumb://\(encoded)"
+}
+
 // MARK: - AppState → Bridge Payload
 
 extension AppState {
@@ -236,7 +294,13 @@ extension AppState {
                 "ytDlp":  dependencyStatus.ytDlp,
                 "ffmpeg": dependencyStatus.ffmpeg,
             ],
+            "libraryFolderAvailable": libraryFolderAvailable,
+            "isScanning": maintenance.isScanning,
+            "isRelocating": maintenance.isRelocating,
+            "appVersion": AppState.appVersion,
         ]
+        if let err = libraryLoadError { payload["libraryLoadError"] = err }
+        if let scan = maintenance.lastScanResult { payload["lastScan"] = scan.bridgePayload() }
 
         // Videos keyed by channelId
         var videosMap: [String: Any] = [:]
@@ -253,6 +317,7 @@ extension AppState {
                 "title":    active.videoTitle,
             ]
         }
+        payload["pendingDownloadCount"] = pendingDownloadCount
 
         // Channels currently being synced
         payload["syncingChannelIds"] = syncingChannelIds.map { $0.uuidString }
@@ -315,7 +380,7 @@ extension Channel {
             "folderName":  folderName,
             "sortOrder":   sortOrder,
             "createdAt":   sharedISO8601Formatter.string(from: createdAt),
-            "bannerPath":  bannerPath.isEmpty ? "" : "localtube-thumb://\(bannerPath)",
+            "bannerPath":  thumbURL(forPath: bannerPath),
         ]
         if let emoji = emoji              { p["emoji"]            = emoji }
         if let ytId  = youtubeChannelId   { p["youtubeChannelId"] = ytId  }
@@ -341,7 +406,7 @@ extension Video {
             "sortOrder":             sortOrder,
             // Convert filesystem thumbnail path to our custom scheme URL for WKWebView.
             // Append ?v=N so WKWebView re-fetches when the file is replaced on disk.
-            "thumbnailPath":         thumbnailPath.isEmpty ? "" : "localtube-thumb://\(thumbnailPath)?v=\(thumbnailVersion)",
+            "thumbnailPath":         thumbURL(forPath: thumbnailPath, version: thumbnailVersion),
             "thumbnailVersion":      thumbnailVersion,
         ]
         if let err = downloadError { p["downloadError"] = err }
@@ -354,6 +419,7 @@ extension AppSettings {
         var p: [String: Any] = [
             "editorAutoLockMinutes": editorAutoLockMinutes,
             "checkDepsOnLaunch":     checkDepsOnLaunch,
+            "downloadQuality":       downloadQuality.rawValue,
         ]
         if let fp = downloadFolderPath { p["downloadFolderPath"] = fp }
         return p

@@ -11,17 +11,168 @@ actor DatabaseService {
 
     // MARK: - Setup
 
+    private(set) var isOpen = false
+
     func open() throws {
+        if isOpen { return }
         let dbURL = try AppSupportDirectory.databaseURL()
         guard sqlite3_open(dbURL.path, &db) == SQLITE_OK else {
             let msg = db.map { String(cString: sqlite3_errmsg($0)) } ?? "Unknown"
+            if let handle = db { sqlite3_close(handle) }
+            db = nil
             throw DatabaseError.openFailed(msg)
         }
         // Enable WAL mode and foreign keys
         sqlite3_exec(db, "PRAGMA journal_mode=WAL;", nil, nil, nil)
         sqlite3_exec(db, "PRAGMA foreign_keys=ON;", nil, nil, nil)
+        // Wait up to 5 s for a lock held by another process (a previous
+        // instance still shutting down) instead of failing immediately.
+        sqlite3_busy_timeout(db, 5000)
         guard let db = db else { throw DatabaseError.openFailed("db is nil") }
+
+        // Snapshot the database before any schema migration so the user can
+        // roll back to the previous build if this one misbehaves. A fresh
+        // (version 0) database has nothing worth backing up.
+        let onDisk = DatabaseMigrations.currentVersion(db: db)
+        if onDisk > 0 && onDisk < DatabaseMigrations.latestVersion {
+            do {
+                let url = try backupDatabase(label: "pre-migration-v\(onDisk)")
+                AppLogger.info("Database backed up before migration: \(url.path)")
+            } catch {
+                // A failed backup must not block launch, but it must be loud.
+                AppLogger.error("Database backup before migration failed: \(error.localizedDescription)")
+            }
+        }
+
         try DatabaseMigrations.run(db: db)
+        isOpen = true
+    }
+
+    // MARK: - Backups
+    //
+    // Uses SQLite's online backup API, which produces a consistent copy
+    // even while in WAL mode (a plain file copy would miss the WAL tail).
+    // Keeps the newest `maxBackups` snapshots and prunes the rest.
+
+    private static let maxBackups = 10
+
+    @discardableResult
+    func backupDatabase(label: String) throws -> URL {
+        guard let db else { throw DatabaseError.openFailed("Not opened") }
+        let dir = try AppSupportDirectory.backupsDirectory()
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyyMMdd-HHmmss"
+        let safeLabel = label.filter { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" }
+        let dest = dir.appendingPathComponent("library-\(safeLabel)-\(formatter.string(from: Date())).sqlite")
+
+        var backupDb: OpaquePointer?
+        guard sqlite3_open(dest.path, &backupDb) == SQLITE_OK, let backupHandle = backupDb else {
+            let msg = backupDb.map { String(cString: sqlite3_errmsg($0)) } ?? "Unknown"
+            if let handle = backupDb { sqlite3_close(handle) }
+            throw DatabaseError.openFailed("backup target: \(msg)")
+        }
+        defer { sqlite3_close(backupHandle) }
+
+        guard let backup = sqlite3_backup_init(backupHandle, "main", db, "main") else {
+            throw DatabaseError.execFailed("backup init: \(String(cString: sqlite3_errmsg(backupHandle)))")
+        }
+        let stepRC = sqlite3_backup_step(backup, -1)
+        let finishRC = sqlite3_backup_finish(backup)
+        guard stepRC == SQLITE_DONE, finishRC == SQLITE_OK else {
+            try? FileManager.default.removeItem(at: dest)
+            throw DatabaseError.execFailed("backup step rc=\(stepRC) finish rc=\(finishRC)")
+        }
+
+        pruneBackups(in: dir)
+        return dest
+    }
+
+    private func pruneBackups(in dir: URL) {
+        guard let items = try? FileManager.default.contentsOfDirectory(
+            at: dir, includingPropertiesForKeys: [.contentModificationDateKey], options: [.skipsHiddenFiles]
+        ) else { return }
+        let snapshots = items
+            .filter { $0.lastPathComponent.hasPrefix("library-") && $0.pathExtension == "sqlite" }
+            .sorted { a, b in
+                let dateA = (try? a.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? Date.distantPast
+                let dateB = (try? b.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? Date.distantPast
+                return dateA > dateB
+            }
+        guard snapshots.count > Self.maxBackups else { return }
+        for old in snapshots[Self.maxBackups...] {
+            try? FileManager.default.removeItem(at: old)
+        }
+    }
+
+    // MARK: - Path relocation
+    //
+    // Rewrites every stored absolute path that begins with `oldPrefix` so
+    // it begins with `newPrefix` instead. Both prefixes must end with "/"
+    // so "/Volumes/Lib" never matches "/Volumes/Library". Uses substr()
+    // rather than LIKE because paths routinely contain `_` and `%`.
+    // Runs inside one transaction and returns the number of rows touched.
+
+    func rewritePathPrefix(from oldPrefix: String, to newPrefix: String) throws -> Int {
+        guard let db else { throw DatabaseError.openFailed("Not opened") }
+        guard oldPrefix.hasSuffix("/"), newPrefix.hasSuffix("/") else {
+            throw DatabaseError.execFailed("rewritePathPrefix: prefixes must end with '/'")
+        }
+        let statements = [
+            "UPDATE videos SET local_file_path = ? || substr(local_file_path, length(?) + 1) WHERE substr(local_file_path, 1, length(?)) = ?;",
+            "UPDATE videos SET thumbnail_path = ? || substr(thumbnail_path, length(?) + 1) WHERE substr(thumbnail_path, 1, length(?)) = ?;",
+            "UPDATE channels SET banner_path = ? || substr(banner_path, length(?) + 1) WHERE substr(banner_path, 1, length(?)) = ?;",
+        ]
+        var total = 0
+        try beginTransaction()
+        do {
+            for sql in statements {
+                var stmt: OpaquePointer?
+                guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+                    throw DatabaseError.prepareFailed(String(cString: sqlite3_errmsg(db)))
+                }
+                bind(stmt: stmt!, index: 1, text: newPrefix)
+                bind(stmt: stmt!, index: 2, text: oldPrefix)
+                bind(stmt: stmt!, index: 3, text: oldPrefix)
+                bind(stmt: stmt!, index: 4, text: oldPrefix)
+                let rc = sqlite3_step(stmt)
+                sqlite3_finalize(stmt)
+                guard rc == SQLITE_DONE else {
+                    throw DatabaseError.execFailed(String(cString: sqlite3_errmsg(db)))
+                }
+                total += Int(sqlite3_changes(db))
+            }
+            try commitTransaction()
+        } catch {
+            rollbackTransaction()
+            throw error
+        }
+        return total
+    }
+
+    /// Updates only the two file-location columns of a video. Used by the
+    /// verify/heal pass so it doesn't clobber live download progress.
+    func updateVideoPaths(id: UUID, localFilePath: String, thumbnailPath: String) throws {
+        guard let db else { throw DatabaseError.openFailed("Not opened") }
+        let sql = "UPDATE videos SET local_file_path=?, thumbnail_path=? WHERE id=?;"
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            throw DatabaseError.prepareFailed(String(cString: sqlite3_errmsg(db)))
+        }
+        defer { sqlite3_finalize(stmt) }
+        bind(stmt: stmt!, index: 1, text: localFilePath)
+        bind(stmt: stmt!, index: 2, text: thumbnailPath)
+        bind(stmt: stmt!, index: 3, text: id.uuidString)
+        guard sqlite3_step(stmt) == SQLITE_DONE else {
+            throw DatabaseError.execFailed(String(cString: sqlite3_errmsg(db)))
+        }
+    }
+
+    /// Bulk-persists a set of videos in one transaction. Same as
+    /// `updateVideosBatched` but tolerant of an empty input.
+    func persistVideos(_ videos: [Video]) throws {
+        guard !videos.isEmpty else { return }
+        try updateVideosBatched(videos)
     }
 
     // H5 fix: Transaction helpers for multi-step writes

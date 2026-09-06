@@ -27,13 +27,30 @@ struct Channel: Identifiable, Codable, Hashable, Sendable {
 
     // MARK: - Computed
 
-    // M1 fix: Sanitize folderName to prevent path traversal
+    // M1 fix: Sanitize folderName to prevent path traversal.
+    //
+    // If sanitizing leaves nothing (a channel named only with emoji or
+    // punctuation), fall back to a stable id-derived name. Previously an
+    // empty folder name made `videosPath` resolve to `<root>/videos`,
+    // dumping that channel's files directly into the library root where
+    // they collided with every other empty-named channel and could never
+    // be safely deleted.
     var sanitizedFolderName: String {
-        folderName
+        let cleaned = folderName
             .replacingOccurrences(of: "..", with: "")
             .replacingOccurrences(of: "/", with: "")
             .replacingOccurrences(of: "\\", with: "")
             .filter { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" }
+        if cleaned.isEmpty {
+            return "channel-" + id.uuidString.prefix(8).lowercased()
+        }
+        return cleaned
+    }
+
+    /// The channel's top-level folder inside the library root. Videos,
+    /// thumbnails and the banner all live beneath this directory.
+    func folderPath(rootFolder: String) -> String {
+        (rootFolder as NSString).appendingPathComponent(sanitizedFolderName)
     }
 
     /// The channel's videos folder path relative to the root download folder.

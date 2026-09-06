@@ -15,9 +15,28 @@ enum PINService {
     private static let pinLengthKey = "lt.pin.length"
     private static let recoveryKey  = "lt.recovery"
 
-    // M5 fix: Rate limiting state
-    private static var failedAttempts = 0
-    private static var lockoutUntil: Date?
+    // M5 fix: Rate limiting state. Persisted so quitting and relaunching
+    // the app doesn't reset the lockout clock.
+    private static let failedAttemptsKey = "lt.pin.failedAttempts"
+    private static let lockoutUntilKey   = "lt.pin.lockoutUntil"
+
+    private static var failedAttempts: Int {
+        get { defaults.integer(forKey: failedAttemptsKey) }
+        set { defaults.set(newValue, forKey: failedAttemptsKey) }
+    }
+    private static var lockoutUntil: Date? {
+        get {
+            let t = defaults.double(forKey: lockoutUntilKey)
+            return t > 0 ? Date(timeIntervalSince1970: t) : nil
+        }
+        set {
+            if let d = newValue {
+                defaults.set(d.timeIntervalSince1970, forKey: lockoutUntilKey)
+            } else {
+                defaults.removeObject(forKey: lockoutUntilKey)
+            }
+        }
+    }
 
     // MARK: - PIN Storage
 
@@ -93,6 +112,7 @@ enum PINService {
         defaults.removeObject(forKey: "lt.pin")
         failedAttempts = 0
         lockoutUntil = nil
+        defaults.removeObject(forKey: failedAttemptsKey)
     }
 
     // MARK: - Recovery Phrase Generation

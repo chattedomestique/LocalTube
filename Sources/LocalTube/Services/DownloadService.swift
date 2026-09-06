@@ -10,6 +10,16 @@ enum DownloadEvent: Sendable {
 }
 
 // MARK: - Download Service
+//
+// Owns the in-session download queue and drives yt-dlp. Everything here
+// is main-actor confined; the only off-main work is the yt-dlp process
+// itself (ShellRunner) whose callbacks hop back via Task { @MainActor }.
+//
+// Persistence contract: every download-state transition that matters
+// after a relaunch (queued → downloading → ready/error) is written to the
+// database as it happens. `resumePendingDownloads()` re-enqueues whatever
+// was still queued or mid-download when the app last quit, so a closed
+// lid or a crash no longer strands half a channel in "Queued" forever.
 
 @Observable
 @MainActor
@@ -20,8 +30,19 @@ final class DownloadService {
     var eventHandler: (@MainActor (DownloadEvent) -> Void)?
 
     private var activeDownloadCount = 0
-    private let maxConcurrent = 6
+    /// Parallel yt-dlp processes. Each one also spawns ffmpeg for the
+    /// final mux, so this is effectively 2× the process count.
+    private let maxConcurrent = 4
     private var lastProgressTime: [UUID: Date] = [:]
+    /// Finished queue entries (completed/failed/cancelled) are kept around
+    /// for the queue panel but trimmed so the array can't grow unbounded
+    /// across a long-running session.
+    private let maxFinishedEntries = 100
+    /// Terminate a download that has produced no output for this long
+    /// (a stuck network connection, a hung ffmpeg). yt-dlp resumes the
+    /// `.part` file on the next retry so nothing is lost.
+    private let downloadInactivityTimeout: TimeInterval = 10 * 60
+    private var loggedFolderUnavailable = false
 
     init(appState: AppState? = nil) {
         self.appState = appState
@@ -32,9 +53,10 @@ final class DownloadService {
     func enqueue(video: Video, channel: Channel) async {
         guard let appState = appState else { return }
 
-        // Don't double-enqueue
-        let alreadyQueued = appState.downloadQueue.contains { $0.videoId == video.id }
-        if alreadyQueued { return }
+        // Drop finished entries for this video so a retry after a failure
+        // isn't blocked by the stale row; then de-duplicate against live ones.
+        appState.downloadQueue.removeAll { $0.videoId == video.id && !$0.isLive }
+        if appState.downloadQueue.contains(where: { $0.videoId == video.id }) { return }
 
         let item = DownloadQueueItem(
             videoId: video.id,
@@ -42,11 +64,14 @@ final class DownloadService {
             channelName: channel.displayName
         )
         appState.downloadQueue.append(item)
+        trimFinishedEntries()
 
-        // Update video state in AppState
-        if var v = appState.videoById(video.id) {
+        // Reflect "queued" in memory + DB so a relaunch picks it back up.
+        if var v = appState.videoById(video.id), v.downloadState != .queued {
             v.downloadState = .queued
-            appState.updateVideo(v)
+            v.downloadProgress = 0
+            v.downloadError = nil
+            appState.updateVideoAndPersist(v, context: "enqueue")
         }
 
         await processNext()
@@ -56,28 +81,35 @@ final class DownloadService {
         guard let appState = appState,
               let item = appState.downloadQueue.first(where: { $0.id == itemId })
         else { return }
+        cancel(item: item, appState: appState)
+    }
 
-        item.activeProcess?.terminate()
-        item.state = .cancelled
-
-        if var v = appState.videoById(item.videoId) {
-            v.downloadState = .queued
-            v.downloadProgress = 0
-            appState.updateVideo(v)
-            let snapshot = v
-            Task { [appState] in
-                await appState.persist("cancelDownload updateVideo") {
-                    try await DatabaseService.shared.updateVideo(snapshot)
-                }
-            }
+    /// Cancels any live download for the given videos (used before a video
+    /// or channel is deleted so the process doesn't keep writing into a
+    /// folder we're about to remove).
+    func cancelDownloads(forVideoIds ids: Set<UUID>) {
+        guard let appState = appState else { return }
+        for item in appState.downloadQueue where ids.contains(item.videoId) && item.isLive {
+            if let process = item.activeProcess { ShellRunner.forceTerminate(process) }
+            item.state = .cancelled
         }
     }
 
     func cancelAll() {
         guard let appState = appState else { return }
-        for item in appState.downloadQueue where item.state == .waiting || item.state == .active {
-            item.activeProcess?.terminate()
-            item.state = .cancelled
+        for item in appState.downloadQueue where item.isLive {
+            cancel(item: item, appState: appState)
+        }
+    }
+
+    private func cancel(item: DownloadQueueItem, appState: AppState) {
+        if let process = item.activeProcess { ShellRunner.forceTerminate(process) }
+        item.state = .cancelled
+
+        if var v = appState.videoById(item.videoId) {
+            v.downloadState = .queued
+            v.downloadProgress = 0
+            appState.updateVideoAndPersist(v, context: "cancelDownload")
         }
     }
 
@@ -86,22 +118,57 @@ final class DownloadService {
     func retryDownload(video: Video, channel: Channel) async {
         guard let appState = appState else { return }
 
-        // Remove any stale queue entry so the dedup check in enqueue() won't block it
+        // A live entry for this video means it's already being handled.
+        if let live = appState.downloadQueue.first(where: { $0.videoId == video.id && $0.isLive }) {
+            AppLogger.info("retryDownload: \(video.title) already \(live.state) — ignoring")
+            return
+        }
         appState.downloadQueue.removeAll { $0.videoId == video.id }
 
-        // Reset the video back to queued state
         var resetVideo = video
         resetVideo.downloadState  = .queued
         resetVideo.downloadProgress = 0
         resetVideo.downloadError  = nil
-        appState.updateVideo(resetVideo)
-        Task { [appState, resetVideo] in
-            await appState.persist("retry updateVideo") {
-                try await DatabaseService.shared.updateVideo(resetVideo)
-            }
-        }
+        appState.updateVideoAndPersist(resetVideo, context: "retry")
 
         await enqueue(video: resetVideo, channel: channel)
+    }
+
+    /// Retries every failed video (optionally scoped to one channel).
+    /// Returns the number of videos re-queued.
+    @discardableResult
+    func retryFailedDownloads(channelId: UUID? = nil) async -> Int {
+        guard let appState = appState else { return 0 }
+        var count = 0
+        for channel in appState.channels where channelId == nil || channel.id == channelId {
+            for video in appState.videosForChannel(channel.id) where video.downloadState == .error {
+                await retryDownload(video: video, channel: channel)
+                count += 1
+            }
+        }
+        return count
+    }
+
+    /// Re-enqueues every video the database still marks as queued or
+    /// downloading. Called once after the library loads. Ordered by
+    /// channel then sort order so the queue mirrors what the user sees.
+    @discardableResult
+    func resumePendingDownloads() async -> Int {
+        guard let appState = appState else { return 0 }
+        var count = 0
+        for channel in appState.channels {
+            let pending = appState.videosForChannel(channel.id)
+                .filter { $0.downloadState == .queued || $0.downloadState == .downloading }
+                .sorted { $0.sortOrder < $1.sortOrder }
+            for video in pending {
+                await enqueue(video: video, channel: channel)
+                count += 1
+            }
+        }
+        if count > 0 {
+            AppLogger.info("Resumed \(count) pending download(s) from a previous session")
+        }
+        return count
     }
 
     // MARK: - Processing Loop
@@ -112,14 +179,27 @@ final class DownloadService {
     private func processNext() async {
         guard let appState = appState else { return }
 
+        // No library folder (unplugged drive, offline share): leave items
+        // waiting rather than failing them all. `recheckLibraryFolder`
+        // calls back here once the folder is reachable again.
+        guard let rootFolder = appState.settings.downloadFolderPath,
+              SettingsService.isDirectory(atPath: rootFolder) else {
+            if !loggedFolderUnavailable {
+                AppLogger.error("Downloads paused: library folder is unavailable")
+                loggedFolderUnavailable = true
+            }
+            return
+        }
+        loggedFolderUnavailable = false
+
         while activeDownloadCount < maxConcurrent,
               let item = appState.downloadQueue.first(where: { $0.state == .waiting }) {
 
             guard let video = appState.videoById(item.videoId),
-                  let channel = appState.channelById(video.channelId),
-                  let rootFolder = appState.settings.downloadFolderPath
+                  let channel = appState.channelById(video.channelId)
             else {
-                item.state = .failed(error: "Missing video or channel data")
+                // The video was deleted while it sat in the queue.
+                item.state = .cancelled
                 continue
             }
 
@@ -134,28 +214,52 @@ final class DownloadService {
                         rootFolder: rootFolder,
                         item: item
                     )
-                    appState.updateVideo(updatedVideo)
-                    try await DatabaseService.shared.updateVideo(updatedVideo)
-                    item.state = .completed
-                    AppLogger.info("Download completed: \(video.title)")
-                    eventHandler?(.completed(video.id))
-                } catch {
-                    item.state = .failed(error: error.localizedDescription)
-                    if var v = appState.videoById(item.videoId) {
-                        v.downloadState = .error
-                        v.downloadError = error.localizedDescription
-                        appState.updateVideo(v)
-                        let snapshot = v
-                        await appState.persist("download error updateVideo") {
-                            try await DatabaseService.shared.updateVideo(snapshot)
-                        }
+                    // The video may have been deleted mid-download; don't
+                    // resurrect it in memory or in the database.
+                    if appState.videoById(video.id) != nil {
+                        appState.updateVideo(updatedVideo)
+                        try await DatabaseService.shared.updateVideo(updatedVideo)
+                        item.state = .completed
+                        AppLogger.info("Download completed: \(updatedVideo.title)")
+                        eventHandler?(.completed(video.id))
+                    } else {
+                        item.state = .cancelled
+                        AppLogger.info("Download finished for a video that was deleted meanwhile: \(video.title)")
                     }
-                    AppLogger.error("Download failed: \(video.title) — \(error.localizedDescription)")
-                    eventHandler?(.error(video.id, error.localizedDescription))
+                } catch {
+                    let message = error.localizedDescription
+                    if item.state == .cancelled {
+                        AppLogger.info("Download cancelled: \(video.title)")
+                    } else {
+                        item.state = .failed(error: message)
+                        if var v = appState.videoById(item.videoId) {
+                            v.downloadState = .error
+                            v.downloadError = message
+                            v.downloadProgress = 0
+                            appState.updateVideoAndPersist(v, context: "download error")
+                        }
+                        AppLogger.error("Download failed: \(video.title) — \(message)")
+                        eventHandler?(.error(video.id, message))
+                    }
                 }
+                lastProgressTime.removeValue(forKey: video.id)
                 activeDownloadCount -= 1
+                trimFinishedEntries()
                 await processNext() // fill the freed slot immediately
             }
+        }
+    }
+
+    private func trimFinishedEntries() {
+        guard let appState = appState else { return }
+        let finished = appState.downloadQueue.filter { !$0.isLive }
+        guard finished.count > maxFinishedEntries else { return }
+        let excess = finished.count - maxFinishedEntries
+        var removed = 0
+        appState.downloadQueue.removeAll { item in
+            guard !item.isLive, removed < excess else { return false }
+            removed += 1
+            return true
         }
     }
 
@@ -170,20 +274,17 @@ final class DownloadService {
         var updatedVideo = video
         updatedVideo.downloadState = .downloading
         updatedVideo.downloadProgress = 0
-        appState?.updateVideo(updatedVideo)
+        updatedVideo.downloadError = nil
+        appState?.updateVideoAndPersist(updatedVideo, context: "download start")
 
         // ── Fetch real title before downloading ──────────────────────────────
         // yt-dlp --skip-download --print is fast (no video bytes downloaded)
         // and replaces the "Video XXXX" placeholder immediately in the UI.
         let fetchedTitle = await fetchVideoTitle(videoId: video.youtubeVideoId)
-        if !fetchedTitle.isEmpty {
+        if !fetchedTitle.isEmpty, fetchedTitle != updatedVideo.title {
             updatedVideo.title = fetchedTitle
             item.videoTitle = fetchedTitle
-            appState?.updateVideo(updatedVideo)
-            let snapshot = updatedVideo
-            await appState?.persist("download title updateVideo") {
-                try await DatabaseService.shared.updateVideo(snapshot)
-            }
+            appState?.updateVideoAndPersist(updatedVideo, context: "download title")
         }
 
         // Ensure directories exist
@@ -192,10 +293,17 @@ final class DownloadService {
         try FileManager.default.createDirectory(atPath: videosDir, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(atPath: thumbsDir, withIntermediateDirectories: true)
 
-        // Output path — use the resolved title slug
-        let safeTitle = updatedVideo.title.slugified()
-        let fileName = "\(safeTitle)-\(video.id.uuidString.prefix(8)).mp4"
-        let outputPath = (videosDir as NSString).appendingPathComponent(fileName)
+        // Output path — use the resolved title slug. Keep the path from a
+        // previous attempt when it exists so yt-dlp can resume its .part.
+        let outputPath: String
+        if !video.localFilePath.isEmpty,
+           LibraryPaths.isPath(video.localFilePath, under: videosDir) {
+            outputPath = video.localFilePath
+        } else {
+            let safeTitle = updatedVideo.title.slugified()
+            let fileName = "\(safeTitle)-\(video.id.uuidString.prefix(8)).mp4"
+            outputPath = (videosDir as NSString).appendingPathComponent(fileName)
+        }
         let thumbnailPath = ThumbnailService.thumbnailPath(
             for: video,
             channel: channel,
@@ -204,13 +312,13 @@ final class DownloadService {
 
         let ytDlp = findYtDlp()
         let videoURL = "https://www.youtube.com/watch?v=\(video.youtubeVideoId)"
+        let quality = appState?.settings.downloadQuality ?? .best
+        let errorLines = ErrorLineCollector()
+        let inactivityTimeout = downloadInactivityTimeout
 
         try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
             let process = ShellRunner.stream(ytDlp, args: [
-                // Prefer H.264 + AAC — universally fast to decode on macOS.
-                // AV1/VP9 are excluded here because AVPlayer needs hardware
-                // acceleration for them and may stall on first-frame rendering.
-                "-f", "bestvideo[vcodec^=avc1][height<=1080]+bestaudio[ext=m4a]/bestvideo[vcodec^=avc1]+bestaudio/bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+                "-f", quality.ytDlpFormat,
                 "--merge-output-format", "mp4",
                 // Ask yt-dlp to write the thumbnail alongside the video file.
                 // yt-dlp saves it as <outputBase>.<ext> next to the video.
@@ -220,8 +328,10 @@ final class DownloadService {
                 "-o", outputPath,
                 "--no-playlist",
                 "--newline",
+                "--no-warnings",
                 videoURL
-            ]) { [weak self, weak item] line in
+            ], inactivityTimeout: inactivityTimeout) { [weak self, weak item] line in
+                errorLines.record(line)
                 guard let self = self, let item = item else { return }
                 let progress = self.parseProgress(from: line)
                 Task { @MainActor in
@@ -240,13 +350,23 @@ final class DownloadService {
                     self.eventHandler?(.progress(video.id, p))
                 }
             } onCompletion: { exitCode in
-                if exitCode == 0 {
+                switch exitCode {
+                case 0:
                     cont.resume()
-                } else {
-                    cont.resume(throwing: ShellError.nonZeroExit(exitCode, "yt-dlp download failed"))
+                case ShellRunner.launchFailedExitCode:
+                    cont.resume(throwing: ShellError.launchFailed(
+                        "yt-dlp could not be launched (\(ytDlp)). Check Settings → Dependencies."))
+                case ShellRunner.stalledExitCode:
+                    cont.resume(throwing: ShellError.stalled(Int(inactivityTimeout)))
+                default:
+                    cont.resume(throwing: ShellError.nonZeroExit(exitCode, errorLines.summary))
                 }
             }
             item.activeProcess = process
+        }
+
+        guard FileManager.default.fileExists(atPath: outputPath) else {
+            throw ShellError.nonZeroExit(0, "yt-dlp reported success but no file was written")
         }
 
         // Extract duration with ffprobe
@@ -266,6 +386,11 @@ final class DownloadService {
                 break
             }
         }
+        // Remove any leftover sibling thumbnails so the videos folder only
+        // holds videos.
+        for src in ytThumbCandidates where FileManager.default.fileExists(atPath: src) {
+            try? FileManager.default.removeItem(atPath: src)
+        }
 
         // Fall back to ffmpeg frame extraction only if yt-dlp didn't produce a thumbnail.
         if !FileManager.default.fileExists(atPath: thumbnailPath) {
@@ -275,9 +400,11 @@ final class DownloadService {
 
         updatedVideo.localFilePath = outputPath
         updatedVideo.thumbnailPath = FileManager.default.fileExists(atPath: thumbnailPath) ? thumbnailPath : ""
+        updatedVideo.thumbnailVersion = video.thumbnailVersion + 1
         updatedVideo.durationSeconds = duration
         updatedVideo.downloadState = .ready
         updatedVideo.downloadProgress = 1.0
+        updatedVideo.downloadError = nil
         updatedVideo.downloadedAt = Date()
 
         return updatedVideo
@@ -302,7 +429,7 @@ final class DownloadService {
             "-show_entries", "format=duration",
             "-of", "default=noprint_wrappers=1:nokey=1",
             path
-        ])
+        ], timeout: 60)
         return output.flatMap { Double($0) } ?? 0
     }
 
@@ -329,6 +456,9 @@ final class DownloadService {
         return fallback
     }
 
+    /// Resolves yt-dlp / ffprobe through `which` so non-standard installs
+    /// (pipx, MacPorts, nix) work. Called at launch and after a dependency
+    /// check; safe to call repeatedly.
     func resolveToolPaths() async {
         cachedYtDlpPath = await ShellRunner.resolveBinary("yt-dlp", fallbacks: [
             "/opt/homebrew/bin/yt-dlp", "/usr/local/bin/yt-dlp",
@@ -381,15 +511,10 @@ final class DownloadService {
             if var v = appState?.videoById(video.id) {
                 v.thumbnailPath = thumbnailPath
                 v.thumbnailVersion += 1   // bumps the localtube-thumb:// URL for cache busting
-                appState?.updateVideo(v)
-                let snapshot = v
-                await appState?.persist("refreshThumbnail updateVideo") {
-                    try await DatabaseService.shared.updateVideo(snapshot)
-                }
+                appState?.updateVideoAndPersist(v, context: "refreshThumbnail")
             }
         }
     }
-
 
     /// Fetches the YouTube video title without downloading any video data.
     /// Returns "" on failure so callers can fall back to the existing title.
@@ -400,13 +525,41 @@ final class DownloadService {
             "--skip-download",
             "--print", "%(title)s",
             "--no-playlist",
+            "--no-warnings",
             url
-        ])
+        ], timeout: 90)
         let raw = output?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         // yt-dlp outputs "NA" when a field is unavailable
         guard !raw.isEmpty, raw != "NA" else { return "" }
         // Decode any residual HTML entities yt-dlp may leave in titles
         // (e.g. &amp; → & , &quot; → " , &#39; → ')
         return raw.htmlEntityDecoded
+    }
+}
+
+// MARK: - Error line collector
+//
+// Keeps the last few "ERROR:" lines yt-dlp printed so a failed download
+// shows *why* it failed ("Video unavailable", "Sign in to confirm your
+// age", …) instead of a generic "yt-dlp download failed".
+
+private final class ErrorLineCollector: @unchecked Sendable {
+    private let lock = NSLock()
+    private var lines: [String] = []
+
+    func record(_ line: String) {
+        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasPrefix("ERROR") || trimmed.lowercased().contains("error:") else { return }
+        lock.lock()
+        lines.append(trimmed)
+        if lines.count > 3 { lines.removeFirst(lines.count - 3) }
+        lock.unlock()
+    }
+
+    var summary: String {
+        lock.lock(); defer { lock.unlock() }
+        if lines.isEmpty { return "yt-dlp download failed" }
+        return lines.joined(separator: " · ")
+            .replacingOccurrences(of: "ERROR: ", with: "")
     }
 }

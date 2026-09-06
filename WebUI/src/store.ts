@@ -6,7 +6,10 @@ import React, {
   useCallback,
   useRef,
 } from 'react'
-import type { AppState, BridgeEvent, BridgeMessage, NavState, Video } from './types'
+import type {
+  AppState, BridgeEvent, BridgeMessage, NavState, Video,
+  LibraryFolderAnalysis, LibraryRelocationResult, ToastKind,
+} from './types'
 import { sendBridge, initBridge } from './bridge'
 
 // ─── Default State ─────────────────────────────────────────────────────────
@@ -21,12 +24,14 @@ const defaultState: AppState = {
     downloadFolderPath: undefined,
     editorAutoLockMinutes: 15,
     downloadQuality: 'best',
+    checkDepsOnLaunch: true,
   },
   dependencyStatus: {
     ytDlp: false,
     ffmpeg: false,
   },
   activeDownload: undefined,
+  pendingDownloadCount: 0,
   syncingChannelIds: [],
   isEditing: false,
   profiles: [],
@@ -37,6 +42,32 @@ const defaultState: AppState = {
   playlistVideos: {},
   activeProfileId: undefined,
   nowPlayingVideoId: undefined,
+  libraryFolderAvailable: true,
+  libraryLoadError: undefined,
+  appVersion: undefined,
+  isScanning: false,
+  isRelocating: false,
+  lastScan: undefined,
+}
+
+// ─── Transient UI state (not part of the Swift-owned AppState) ─────────────
+export interface Toast {
+  id: number
+  message: string
+  kind: ToastKind
+}
+
+export interface LibraryUIState {
+  /** Set after `chooseLibraryFolder` returns; drives RelocateLibraryModal. */
+  pendingFolderAnalysis: LibraryFolderAnalysis | null
+  relocationProgress: { done: number; total: number; channel: string } | null
+  lastRelocation: LibraryRelocationResult | null
+}
+
+const defaultLibraryUI: LibraryUIState = {
+  pendingFolderAnalysis: null,
+  relocationProgress: null,
+  lastRelocation: null,
 }
 
 // ─── Store Shape ───────────────────────────────────────────────────────────
@@ -49,8 +80,14 @@ interface AppStore {
   // Transient UI events (non-state)
   onFolderSelected?: (path: string) => void
   setOnFolderSelected: (fn: ((path: string) => void) | undefined) => void
-  onPINValidated?: (valid: boolean) => void
-  setOnPINValidated: (fn: ((valid: boolean) => void) | undefined) => void
+  onPINValidated?: (valid: boolean, lockoutSeconds: number) => void
+  setOnPINValidated: (fn: ((valid: boolean, lockoutSeconds: number) => void) | undefined) => void
+  toasts: Toast[]
+  showToast: (message: string, kind?: ToastKind) => void
+  dismissToast: (id: number) => void
+  libraryUI: LibraryUIState
+  clearPendingFolderAnalysis: () => void
+  clearLastRelocation: () => void
 }
 
 // ─── State Reducer ─────────────────────────────────────────────────────────
@@ -58,13 +95,19 @@ type Action =
   | { kind: 'bridgeEvent'; event: BridgeEvent }
   | { kind: 'navigate'; nav: NavState }
   | { kind: 'setOnFolderSelected'; fn: ((path: string) => void) | undefined }
-  | { kind: 'setOnPINValidated'; fn: ((valid: boolean) => void) | undefined }
+  | { kind: 'setOnPINValidated'; fn: ((valid: boolean, lockoutSeconds: number) => void) | undefined }
+  | { kind: 'toast'; toast: Toast }
+  | { kind: 'dismissToast'; id: number }
+  | { kind: 'clearPendingFolderAnalysis' }
+  | { kind: 'clearLastRelocation' }
 
 interface FullState {
   app: AppState
   nav: NavState
   onFolderSelected?: (path: string) => void
-  onPINValidated?: (valid: boolean) => void
+  onPINValidated?: (valid: boolean, lockoutSeconds: number) => void
+  toasts: Toast[]
+  libraryUI: LibraryUIState
 }
 
 function applyBridgeEvent(app: AppState, event: BridgeEvent): AppState {
@@ -81,6 +124,9 @@ function applyBridgeEvent(app: AppState, event: BridgeEvent): AppState {
       if (event.payload.videos) {
         updated.videos = { ...app.videos, ...event.payload.videos }
       }
+      // Optional keys that Swift omits when nil must clear, not linger.
+      if (!('activeDownload' in event.payload)) updated.activeDownload = undefined
+      if (!('libraryLoadError' in event.payload)) updated.libraryLoadError = undefined
       return updated
     }
     case 'downloadProgress': {
@@ -183,7 +229,19 @@ function applyBridgeEvent(app: AppState, event: BridgeEvent): AppState {
           videos[channelId] = updated
         }
       }
-      return { ...app, videos }
+      const active =
+        app.activeDownload?.videoId === videoId ? undefined : app.activeDownload
+      return { ...app, videos, activeDownload: active }
+    }
+    // ── Library maintenance ───────────────────────────────────────────────
+    case 'libraryScanStarted': {
+      return { ...app, isScanning: true }
+    }
+    case 'libraryScanCompleted': {
+      return { ...app, isScanning: false, lastScan: event.payload }
+    }
+    case 'libraryRelocated': {
+      return { ...app, isRelocating: false }
     }
     // editorTimerTick removed with the auto-lock timer.
     // ── Targeted diff events ──────────────────────────────────────────────
@@ -217,7 +275,16 @@ function applyBridgeEvent(app: AppState, event: BridgeEvent): AppState {
       for (const cid of Object.keys(app.videos)) {
         videos[cid] = app.videos[cid].filter(v => v.id !== videoId)
       }
-      return { ...app, videos }
+      // Drop the id from every playlist / favorite list too.
+      const playlistVideos: Record<string, string[]> = {}
+      for (const plid of Object.keys(app.playlistVideos)) {
+        playlistVideos[plid] = app.playlistVideos[plid].filter(id => id !== videoId)
+      }
+      const profileFavorites: Record<string, string[]> = {}
+      for (const pid of Object.keys(app.profileFavorites)) {
+        profileFavorites[pid] = app.profileFavorites[pid].filter(id => id !== videoId)
+      }
+      return { ...app, videos, playlistVideos, profileFavorites }
     }
     case 'settingsUpdated': {
       return { ...app, settings: { ...app.settings, ...event.payload.settings } }
@@ -341,22 +408,68 @@ function applyBridgeEvent(app: AppState, event: BridgeEvent): AppState {
         },
       }
     }
-    // folderSelected and pinValidated are handled via callbacks, not state
+    // folderSelected / pinValidated / toast / libraryFolderPicked /
+    // libraryRelocationProgress are handled outside the AppState slice.
     default:
       return app
   }
 }
 
+let nextToastId = 1
+
+function applyLibraryUI(ui: LibraryUIState, event: BridgeEvent): LibraryUIState {
+  switch (event.type) {
+    case 'libraryFolderPicked':
+      return {
+        ...ui,
+        pendingFolderAnalysis: event.payload.cancelled ? null : (event.payload.analysis ?? null),
+      }
+    case 'libraryRelocationProgress':
+      return { ...ui, relocationProgress: event.payload }
+    case 'libraryRelocated':
+      return { ...ui, relocationProgress: null, lastRelocation: event.payload, pendingFolderAnalysis: null }
+    default:
+      return ui
+  }
+}
+
 function reducer(state: FullState, action: Action): FullState {
   switch (action.kind) {
-    case 'bridgeEvent':
-      return { ...state, app: applyBridgeEvent(state.app, action.event) }
+    case 'bridgeEvent': {
+      const event = action.event
+      let toasts: Toast[] = state.toasts
+      if (event.type === 'toast') {
+        const toast: Toast = { id: nextToastId++, message: event.payload.message, kind: event.payload.kind ?? 'info' }
+        toasts = [...toasts, toast].slice(-4)
+      } else if (event.type === 'libraryRelocated') {
+        const toast: Toast = {
+          id: nextToastId++,
+          message: event.payload.message,
+          kind: event.payload.ok ? 'success' : 'error',
+        }
+        toasts = [...toasts, toast].slice(-4)
+      }
+      return {
+        ...state,
+        app: applyBridgeEvent(state.app, event),
+        libraryUI: applyLibraryUI(state.libraryUI, event),
+        toasts,
+      }
+    }
     case 'navigate':
       return { ...state, nav: action.nav }
     case 'setOnFolderSelected':
       return { ...state, onFolderSelected: action.fn }
     case 'setOnPINValidated':
       return { ...state, onPINValidated: action.fn }
+    case 'toast':
+      return { ...state, toasts: [...state.toasts, action.toast].slice(-4) }
+    case 'dismissToast':
+      return { ...state, toasts: state.toasts.filter(t => t.id !== action.id) }
+    case 'clearPendingFolderAnalysis':
+      return { ...state, libraryUI: { ...state.libraryUI, pendingFolderAnalysis: null } }
+    case 'clearLastRelocation':
+      return { ...state, libraryUI: { ...state.libraryUI, lastRelocation: null } }
     default:
       return state
   }
@@ -370,6 +483,8 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
   const [fullState, reducerDispatch] = useReducer(reducer, {
     app: defaultState,
     nav: { screen: 'library' },
+    toasts: [],
+    libraryUI: defaultLibraryUI,
   })
 
   // Keep callbacks in a ref so we can call them without triggering re-renders
@@ -396,7 +511,7 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
       if (event.type === 'folderSelected') {
         callbacksRef.current.onFolderSelected?.(event.payload.path)
       } else if (event.type === 'pinValidated') {
-        callbacksRef.current.onPINValidated?.(event.payload.valid)
+        callbacksRef.current.onPINValidated?.(event.payload.valid, event.payload.lockoutSeconds ?? 0)
       } else if (event.type === 'navigateTo') {
         reducerDispatch({ kind: 'navigate', nav: event.payload })
         return
@@ -447,11 +562,27 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
   )
 
   const setOnPINValidated = useCallback(
-    (fn: ((valid: boolean) => void) | undefined) => {
+    (fn: ((valid: boolean, lockoutSeconds: number) => void) | undefined) => {
       reducerDispatch({ kind: 'setOnPINValidated', fn })
     },
     []
   )
+
+  const showToast = useCallback((message: string, kind: ToastKind = 'info') => {
+    reducerDispatch({ kind: 'toast', toast: { id: nextToastId++, message, kind } })
+  }, [])
+
+  const dismissToast = useCallback((id: number) => {
+    reducerDispatch({ kind: 'dismissToast', id })
+  }, [])
+
+  const clearPendingFolderAnalysis = useCallback(() => {
+    reducerDispatch({ kind: 'clearPendingFolderAnalysis' })
+  }, [])
+
+  const clearLastRelocation = useCallback(() => {
+    reducerDispatch({ kind: 'clearLastRelocation' })
+  }, [])
 
   const store: AppStore = {
     state: fullState.app,
@@ -463,6 +594,12 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
     setOnFolderSelected,
     onPINValidated: fullState.onPINValidated,
     setOnPINValidated,
+    toasts: fullState.toasts,
+    showToast,
+    dismissToast,
+    libraryUI: fullState.libraryUI,
+    clearPendingFolderAnalysis,
+    clearLastRelocation,
   }
 
   return React.createElement(AppStoreContext.Provider, { value: store }, children)

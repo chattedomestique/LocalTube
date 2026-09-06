@@ -39,7 +39,12 @@ final class LocalTubeBridge: NSObject, WKScriptMessageHandler {
 
         let payloadDict = body["payload"] as? [String: Any] ?? [:]
 
-        AppLogger.info("Bridge ← JS: \(typeStr)")
+        // Never log PIN payloads.
+        if messageType != .validatePIN && messageType != .setPIN {
+            AppLogger.info("Bridge ← JS: \(typeStr)")
+        } else {
+            AppLogger.info("Bridge ← JS: \(typeStr) (payload redacted)")
+        }
 
         switch messageType {
         case .getState:          handleGetState()
@@ -79,7 +84,112 @@ final class LocalTubeBridge: NSObject, WKScriptMessageHandler {
         case .reorderPlaylist:     handleReorderPlaylist(payloadDict)
         case .clearPlaylist:       handleClearPlaylist(payloadDict)
         case .setAutoPlaybackMode: handleSetAutoPlaybackMode(payloadDict)
+        case .chooseLibraryFolder: handleChooseLibraryFolder()
+        case .relocateLibrary:     handleRelocateLibrary(payloadDict)
+        case .verifyLibrary:       handleVerifyLibrary()
+        case .revealLibraryFolder: handleRevealLibraryFolder()
+        case .recheckLibraryFolder: handleRecheckLibraryFolder()
+        case .retryFailedDownloads: handleRetryFailedDownloads(payloadDict)
         }
+    }
+
+    // MARK: - Library management
+
+    /// Settings → Change… Picks a folder and returns an analysis so the UI
+    /// can offer Move / Adopt / Switch. Never changes settings by itself.
+    private func handleChooseLibraryFolder() {
+        guard let appState else { return }
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.canCreateDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Choose Library Folder"
+        panel.message = "Select the folder where LocalTube should keep downloaded videos."
+        if let current = appState.settings.downloadFolderPath, SettingsService.isDirectory(atPath: current) {
+            panel.directoryURL = URL(fileURLWithPath: current).deletingLastPathComponent()
+        }
+        panel.begin { [weak self] response in
+            Task { @MainActor [weak self] in
+                guard let self, let appState = self.appState else { return }
+                guard response == .OK, let url = panel.url else {
+                    self.emitter.emitLibraryFolderPicked(analysis: nil)
+                    return
+                }
+                let analysis = await appState.maintenance.analyzeFolder(url.path)
+                self.emitter.emitLibraryFolderPicked(analysis: analysis)
+            }
+        }
+    }
+
+    private func handleRelocateLibrary(_ payload: [String: Any]) {
+        guard let appState,
+              let path = payload["path"] as? String, !path.isEmpty,
+              let modeRaw = payload["mode"] as? String,
+              let mode = LibraryRelocationMode(rawValue: modeRaw) else {
+            AppLogger.error("Bridge: relocateLibrary rejected — invalid payload")
+            emitter.emitLibraryRelocated(result: LibraryRelocationResult(
+                mode: .switchOnly, newRoot: "", message: "Invalid relocation request."))
+            return
+        }
+        Task { [weak self] in
+            guard let self, let appState = self.appState else { return }
+            let result = await appState.maintenance.relocate(to: path, mode: mode)
+            self.emitter.emitLibraryRelocated(result: result)
+            self.emitter.emitStateUpdate(appState)
+        }
+        _ = appState
+    }
+
+    private func handleVerifyLibrary() {
+        guard let appState else { return }
+        emitter.emitLibraryScanStarted()
+        Task { [weak self] in
+            guard let self, let appState = self.appState else { return }
+            let result = await appState.maintenance.verify(requeueMissing: true)
+            self.emitter.emitLibraryScanCompleted(result: result)
+            self.emitter.emitStateUpdate(appState)
+        }
+        _ = appState
+    }
+
+    private func handleRevealLibraryFolder() {
+        guard let appState,
+              let path = appState.settings.downloadFolderPath, !path.isEmpty else { return }
+        if SettingsService.isDirectory(atPath: path) {
+            NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+        } else {
+            AppLogger.error("revealLibraryFolder: folder not reachable: \(path)")
+        }
+    }
+
+    private func handleRecheckLibraryFolder() {
+        guard let appState else { return }
+        let available = appState.refreshLibraryFolderAvailability()
+        if available {
+            Task { [weak self] in
+                guard let self, let appState = self.appState else { return }
+                await appState.downloadService.resumePendingDownloads()
+                self.emitter.emitStateUpdate(appState)
+                let result = await appState.maintenance.verify(requeueMissing: true)
+                self.emitter.emitLibraryScanCompleted(result: result)
+                self.emitter.emitStateUpdate(appState)
+            }
+        } else {
+            emitter.emitStateUpdate(appState)
+        }
+    }
+
+    private func handleRetryFailedDownloads(_ payload: [String: Any]) {
+        guard let appState else { return }
+        let channelId = (payload["channelId"] as? String).flatMap(UUID.init(uuidString:))
+        Task { [weak self] in
+            guard let self, let appState = self.appState else { return }
+            let n = await appState.downloadService.retryFailedDownloads(channelId: channelId)
+            AppLogger.info("retryFailedDownloads: re-queued \(n) video(s)")
+            self.emitter.emitStateUpdate(appState)
+        }
+        _ = appState
     }
 
     // MARK: - Playback
@@ -170,7 +280,7 @@ final class LocalTubeBridge: NSObject, WKScriptMessageHandler {
               let rawIds = payload["videoIds"] as? [String] else { return }
         let ids = rawIds.compactMap(UUID.init(uuidString:))
         appState.reorderPlaylist(playlistId: plid, videoIds: ids)
-        emitter.emitPlaylistVideosUpdated(playlistId: plid, videoIds: ids)
+        emitter.emitPlaylistVideosUpdated(playlistId: plid, videoIds: appState.playlistVideos[plid] ?? [])
     }
 
     private func handleClearPlaylist(_ payload: [String: Any]) {
@@ -232,6 +342,24 @@ final class LocalTubeBridge: NSObject, WKScriptMessageHandler {
               let appState,
               let video      = appState.videoById(videoId) else { return }
 
+        // A "ready" video whose file vanished (drive swapped, deleted in
+        // Finder) would otherwise open a black player. Put it back in the
+        // download queue and tell the UI.
+        if video.isPlayable, !FileManager.default.fileExists(atPath: video.localFilePath) {
+            AppLogger.error("playVideo: file missing for \(video.title) at \(video.localFilePath)")
+            Task { [weak self] in
+                guard let self, let appState = self.appState else { return }
+                if let updated = await appState.markVideoMissing(video) {
+                    self.emitter.emitVideosUpserted(channelId: updated.channelId, videos: [updated])
+                }
+                self.emitter.emitToast(
+                    "\"\(video.title)\" is missing from the library folder and has been re-queued for download.",
+                    kind: "warning"
+                )
+            }
+            return
+        }
+
         // Resolve the playback source. `source` is "queue" or "channel" and
         // `contextId` is the playlist/channel UUID. Falls back to the
         // video's own channel so older call sites keep working.
@@ -253,12 +381,18 @@ final class LocalTubeBridge: NSObject, WKScriptMessageHandler {
         playerOverlayController?.hide()
     }
 
-    // MARK: - Folder Picker
+    // MARK: - Folder Picker (onboarding)
 
+    /// First-run folder choice. Sets the download folder directly and ends
+    /// onboarding. (Settings uses `chooseLibraryFolder` instead, which
+    /// goes through the relocation flow so existing videos aren't
+    /// orphaned.) Previously `isOnboarding` never flipped to false here,
+    /// so a fresh install stayed on the welcome screen until relaunch.
     private func handleOpenFolderPicker() {
         let panel = NSOpenPanel()
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
+        panel.canCreateDirectories = true
         panel.allowsMultipleSelection = false
         panel.prompt = "Choose Download Folder"
         panel.message = "Select the folder where LocalTube will save downloaded videos."
@@ -266,10 +400,25 @@ final class LocalTubeBridge: NSObject, WKScriptMessageHandler {
             guard response == .OK, let url = panel.url else { return }
             Task { @MainActor [weak self] in
                 guard let self, let appState = self.appState else { return }
-                appState.settings.downloadFolderPath = url.path
+                let path = LibraryPaths.normalize(url.path)
+                let hadLibrary = !appState.library.allVideos.isEmpty
+                if hadLibrary, let current = appState.settings.downloadFolderPath,
+                   LibraryPaths.normalize(current) != path {
+                    // Not onboarding — an existing library is being moved.
+                    // Route through the relocation flow instead of silently
+                    // re-pointing new downloads and orphaning the old files.
+                    let analysis = await appState.maintenance.analyzeFolder(path)
+                    self.emitter.emitLibraryFolderPicked(analysis: analysis)
+                    return
+                }
+                appState.settings.downloadFolderPath = path
+                appState.settings.rememberLibraryRoot(path)
                 SettingsService.save(appState.settings)
-                self.emitter.emitFolderSelected(path: url.path)
+                appState.isOnboarding = false
+                appState.refreshLibraryFolderAvailability()
+                self.emitter.emitFolderSelected(path: path)
                 self.emitter.emitStateUpdate(appState)
+                await appState.downloadService.resumePendingDownloads()
             }
         }
     }
@@ -282,7 +431,11 @@ final class LocalTubeBridge: NSObject, WKScriptMessageHandler {
               pin.count >= 4, pin.count <= 8,
               pin.allSatisfy({ $0.isNumber }) else {
             AppLogger.error("Bridge: validatePIN rejected — invalid PIN format")
-            emitter.emitPINValidated(valid: false)
+            emitter.emitPINValidated(valid: false, lockoutSeconds: Int(PINService.lockoutRemaining.rounded(.up)))
+            return
+        }
+        if PINService.isLockedOut {
+            emitter.emitPINValidated(valid: false, lockoutSeconds: Int(PINService.lockoutRemaining.rounded(.up)))
             return
         }
         let valid = PINService.verify(pin)
@@ -294,7 +447,7 @@ final class LocalTubeBridge: NSObject, WKScriptMessageHandler {
             case .edit:  appState.enterEditMode()
             }
         }
-        emitter.emitPINValidated(valid: valid)
+        emitter.emitPINValidated(valid: valid, lockoutSeconds: Int(PINService.lockoutRemaining.rounded(.up)))
         if let appState { emitter.emitStateUpdate(appState) }
     }
 
@@ -377,19 +530,20 @@ final class LocalTubeBridge: NSObject, WKScriptMessageHandler {
         }
 
         let emoji     = payload["emoji"]            as? String
-        let ytId      = payload["youtubeChannelId"] as? String
-        let folderName = displayName
-            .lowercased()
-            .replacingOccurrences(of: " ", with: "-")
-            .filter { $0.isLetter || $0.isNumber || $0 == "-" }
+        let ytId      = (payload["youtubeChannelId"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        // Folder name: slug of the display name, made unique across the
+        // library so two channels never share (and never delete) each
+        // other's files.
+        let folderName = appState.library.uniqueFolderName(base: displayName.trimmingCharacters(in: .whitespacesAndNewlines).slugified())
 
         let channel = Channel(
-            displayName: displayName,
+            displayName: displayName.trimmingCharacters(in: .whitespacesAndNewlines),
             emoji: emoji,
             type: channelType,
-            youtubeChannelId: ytId,
+            youtubeChannelId: (ytId?.isEmpty == false) ? ytId : nil,
             folderName: folderName,
-            sortOrder: appState.channels.count
+            sortOrder: (appState.channels.map { $0.sortOrder }.max() ?? -1) + 1
         )
         appState.addChannel(channel)
         emitter.emitChannelUpserted(channel)
@@ -416,6 +570,8 @@ final class LocalTubeBridge: NSObject, WKScriptMessageHandler {
               let channelId    = UUID(uuidString: channelIdStr) else { return }
         appState.removeChannel(id: channelId)
         emitter.emitChannelRemoved(id: channelId)
+        // Playlists / favorites may have lost members.
+        emitter.emitStateUpdate(appState)
     }
 
     // M11 fix: Validate displayName length on update.
@@ -427,9 +583,12 @@ final class LocalTubeBridge: NSObject, WKScriptMessageHandler {
 
         if let name = payload["displayName"] as? String,
            !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-           name.count <= 100 { channel.displayName = name }
-        if let emoji = payload["emoji"] as? String { channel.emoji = emoji }
-        if let ytId  = payload["youtubeChannelId"] as? String { channel.youtubeChannelId = ytId }
+           name.count <= 100 { channel.displayName = name.trimmingCharacters(in: .whitespacesAndNewlines) }
+        if let emoji = payload["emoji"] as? String { channel.emoji = emoji.isEmpty ? nil : emoji }
+        if let ytId  = payload["youtubeChannelId"] as? String {
+            let trimmed = ytId.trimmingCharacters(in: .whitespacesAndNewlines)
+            channel.youtubeChannelId = trimmed.isEmpty ? nil : trimmed
+        }
 
         appState.updateChannel(channel)
         emitter.emitChannelUpserted(channel)
@@ -447,8 +606,11 @@ final class LocalTubeBridge: NSObject, WKScriptMessageHandler {
         // M11 fix: Cap the number of URLs per request to prevent abuse.
         let cappedURLs = Array(urls.prefix(50))
         var addedVideos: [Video] = []
+        var seen = Set<String>()
+        var nextSortOrder = (appState.videosForChannel(channelId).map { $0.sortOrder }.max() ?? -1) + 1
         for url in cappedURLs {
-            guard let videoId = url.youtubeVideoId else { continue }
+            guard let videoId = url.trimmingCharacters(in: .whitespacesAndNewlines).youtubeVideoId,
+                  !videoId.isEmpty, seen.insert(videoId).inserted else { continue }
             let alreadyAdded = appState.videosForChannel(channelId).contains { $0.youtubeVideoId == videoId }
             if alreadyAdded { continue }
             let video = Video(
@@ -456,14 +618,20 @@ final class LocalTubeBridge: NSObject, WKScriptMessageHandler {
                 youtubeVideoId: videoId,
                 title: "Video \(videoId)",
                 downloadState: .queued,
-                sortOrder: appState.videosForChannel(channelId).count
+                sortOrder: nextSortOrder
             )
+            nextSortOrder += 1
             appState.addVideo(video)
             addedVideos.append(video)
-            Task { await appState.downloadService.enqueue(video: video, channel: channel) }
         }
         if !addedVideos.isEmpty {
             emitter.emitVideosUpserted(channelId: channelId, videos: addedVideos)
+            let toEnqueue = addedVideos
+            Task {
+                for video in toEnqueue {
+                    await appState.downloadService.enqueue(video: video, channel: channel)
+                }
+            }
         }
     }
 
@@ -475,27 +643,47 @@ final class LocalTubeBridge: NSObject, WKScriptMessageHandler {
         emitter.emitVideoRemoved(id: videoId)
     }
 
+    /// Retry goes through `retryDownload`, which clears the stale failed
+    /// queue entry first. Calling `enqueue` directly (as this used to)
+    /// was a no-op after a failure because the dead entry still matched
+    /// the de-duplication check — the Retry button did nothing.
     private func handleRetryDownload(_ payload: [String: Any]) {
         guard let appState,
               let videoIdStr = payload["videoId"] as? String,
               let videoId    = UUID(uuidString: videoIdStr),
               let video      = appState.videoById(videoId),
               let channel    = appState.channelById(video.channelId) else { return }
-        Task { await appState.downloadService.enqueue(video: video, channel: channel) }
+        Task { [weak self] in
+            guard let self, let appState = self.appState else { return }
+            await appState.downloadService.retryDownload(video: video, channel: channel)
+            if let updated = appState.videoById(videoId) {
+                self.emitter.emitVideosUpserted(channelId: updated.channelId, videos: [updated])
+            }
+        }
     }
 
     // MARK: - Settings
 
+    /// Applies the editable settings. The download folder is deliberately
+    /// NOT accepted here — changing it must go through the relocation
+    /// flow (`chooseLibraryFolder` → `relocateLibrary`) so existing files
+    /// are moved or adopted rather than orphaned.
     private func handleSaveSettings(_ payload: [String: Any]) {
         guard let appState else { return }
-        if let mins = payload["editorAutoLockMinutes"] as? Int {
+        if let mins = payload["editorAutoLockMinutes"] as? Int, (1...120).contains(mins) {
             appState.settings.editorAutoLockMinutes = mins
-        }
-        if let fp = payload["downloadFolderPath"] as? String {
-            appState.settings.downloadFolderPath = fp
         }
         if let check = payload["checkDepsOnLaunch"] as? Bool {
             appState.settings.checkDepsOnLaunch = check
+        }
+        if let qualityRaw = payload["downloadQuality"] as? String,
+           let quality = DownloadQuality(rawValue: qualityRaw) {
+            appState.settings.downloadQuality = quality
+        }
+        if let fp = payload["downloadFolderPath"] as? String,
+           let current = appState.settings.downloadFolderPath,
+           LibraryPaths.normalize(fp) != LibraryPaths.normalize(current) {
+            AppLogger.error("Bridge: saveSettings ignored downloadFolderPath change — use the relocation flow")
         }
         SettingsService.save(appState.settings)
         emitter.emitSettingsUpdated(appState.settings)
@@ -508,7 +696,8 @@ final class LocalTubeBridge: NSObject, WKScriptMessageHandler {
               let channelIdStr = payload["channelId"] as? String,
               let channelId    = UUID(uuidString: channelIdStr),
               let channel      = appState.channelById(channelId) else { return }
-        Task {
+        Task { [weak self] in
+            guard let self, let appState = self.appState else { return }
             await appState.syncChannel(channel)
             self.emitter.emitStateUpdate(appState)
         }
@@ -537,7 +726,7 @@ final class LocalTubeBridge: NSObject, WKScriptMessageHandler {
             Task { @MainActor [weak self] in
                 guard let self, let appState = self.appState else { return }
 
-                let destDir  = (rootFolder as NSString).appendingPathComponent(channel.sanitizedFolderName)
+                let destDir  = channel.folderPath(rootFolder: rootFolder)
                 let destPath = (destDir as NSString).appendingPathComponent("banner.jpg")
 
                 do {
@@ -566,6 +755,7 @@ final class LocalTubeBridge: NSObject, WKScriptMessageHandler {
                     AppLogger.info("Banner uploaded for channel \(channel.displayName)")
                 } catch {
                     AppLogger.error("Banner upload failed: \(error.localizedDescription)")
+                    self.emitter.emitToast("Banner upload failed: \(error.localizedDescription)", kind: "error")
                 }
             }
         }
@@ -575,9 +765,11 @@ final class LocalTubeBridge: NSObject, WKScriptMessageHandler {
 
     private func handleCheckDependencies() {
         guard let appState else { return }
-        Task {
+        Task { [weak self] in
+            guard let self, let appState = self.appState else { return }
             await appState.dependencyService.checkAll()
             appState.dependencyStatus = appState.dependencyService.status
+            await appState.downloadService.resolveToolPaths()
             self.emitter.emitStateUpdate(appState)
         }
     }
@@ -587,7 +779,8 @@ final class LocalTubeBridge: NSObject, WKScriptMessageHandler {
     private func handleSetActiveProfile(_ payload: [String: Any]) {
         guard let appState else { return }
         // payload.profileId is either a UUID string or null (clear).
-        if let raw = payload["profileId"] as? String, let id = UUID(uuidString: raw) {
+        if let raw = payload["profileId"] as? String, let id = UUID(uuidString: raw),
+           appState.profiles.contains(where: { $0.id == id }) {
             appState.activeProfileId = id
         } else {
             appState.activeProfileId = nil
@@ -609,11 +802,11 @@ final class LocalTubeBridge: NSObject, WKScriptMessageHandler {
         let channelIds: [UUID] = (payload["channelIds"] as? [String])?
             .compactMap(UUID.init(uuidString:)) ?? []
         let profile = Profile(
-            name: name,
+            name: name.trimmingCharacters(in: .whitespacesAndNewlines),
             emoji: emoji,
             icon: icon,
             color: color,
-            sortOrder: appState.profiles.count
+            sortOrder: (appState.profiles.map { $0.sortOrder }.max() ?? -1) + 1
         )
         appState.addProfile(profile)
         if !channelIds.isEmpty {
@@ -621,7 +814,15 @@ final class LocalTubeBridge: NSObject, WKScriptMessageHandler {
         }
         emitter.emitProfileUpserted(profile)
         if !channelIds.isEmpty {
-            emitter.emitProfileChannelsUpdated(profileId: profile.id, channelIds: channelIds)
+            emitter.emitProfileChannelsUpdated(
+                profileId: profile.id,
+                channelIds: Array(appState.profileChannels[profile.id] ?? [])
+            )
+        }
+        // Profile creation also seeds an "Up Next" playlist.
+        if let upNext = appState.playlists.first(where: { $0.profileId == profile.id && $0.isSystem }) {
+            emitter.emitPlaylistUpserted(upNext)
+            emitter.emitActivePlaylistChanged(profileId: profile.id, activePlaylistId: upNext.id)
         }
     }
 
@@ -634,7 +835,7 @@ final class LocalTubeBridge: NSObject, WKScriptMessageHandler {
         if let name = payload["name"] as? String,
            !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
            name.count <= 60 {
-            profile.name = name
+            profile.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
         }
         if let emoji = payload["emoji"] as? String {
             profile.emoji = emoji.isEmpty ? nil : emoji
@@ -661,6 +862,8 @@ final class LocalTubeBridge: NSObject, WKScriptMessageHandler {
         if wasActive {
             emitter.emitActiveProfileChanged(activeProfileId: nil)
         }
+        // Owned playlists went with it.
+        emitter.emitStateUpdate(appState)
     }
 
     private func handleSetProfileChannels(_ payload: [String: Any]) {
@@ -670,6 +873,11 @@ final class LocalTubeBridge: NSObject, WKScriptMessageHandler {
               let rawIds = payload["channelIds"] as? [String] else { return }
         let channelIds = rawIds.compactMap(UUID.init(uuidString:))
         appState.setProfileChannels(profileId: id, channelIds: channelIds)
-        emitter.emitProfileChannelsUpdated(profileId: id, channelIds: channelIds)
+        // Echo back the cleaned list (unknown/duplicate ids dropped) in the
+        // order the UI sent so drag-reorder stays exact.
+        let accepted = appState.profileChannels[id] ?? []
+        var seen = Set<UUID>()
+        let ordered = channelIds.filter { accepted.contains($0) && seen.insert($0).inserted }
+        emitter.emitProfileChannelsUpdated(profileId: id, channelIds: ordered)
     }
 }

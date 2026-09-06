@@ -1,10 +1,11 @@
 import type { ReactNode } from 'react'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useAppStore } from '../store'
-import type { AppSettings } from '../types'
+import type { AppSettings, LibraryScanResult } from '../types'
+import { formatBytes } from '../utils'
 
 const QUALITY_OPTIONS = [
-  { value: 'best',     label: 'Best Available' },
+  { value: 'best',     label: 'Best Available (up to 1080p)' },
   { value: '1080p',    label: '1080p (Full HD)' },
   { value: '720p',     label: '720p (HD)' },
   { value: '480p',     label: '480p (SD)' },
@@ -20,7 +21,7 @@ function SettingRow({
   children,
 }: {
   label: string
-  description?: string
+  description?: ReactNode
   htmlFor?: string
   children: ReactNode
 }) {
@@ -32,7 +33,7 @@ function SettingRow({
       gap: 24,
       padding: '16px 20px',
     }}>
-      <div>
+      <div style={{ minWidth: 0 }}>
         <label
           htmlFor={htmlFor}
           style={{
@@ -62,32 +63,47 @@ function Divider() {
   return <div style={{ height: 1, background: 'rgba(255,255,255,0.09)', margin: '0 20px' }} />
 }
 
+const PANEL_STYLE = {
+  background: 'linear-gradient(135deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.04) 100%)',
+  backgroundColor: 'rgba(20,20,25,0.7)',
+  backdropFilter: 'blur(20px) saturate(180%)',
+  WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+  border: '0.5px solid rgba(255,255,255,0.12)',
+  borderRadius: 14,
+  overflow: 'hidden',
+  boxShadow: '0 4px 16px rgba(0,0,0,0.35), 0 1px 4px rgba(0,0,0,0.2), inset 0 0 0 1px rgba(255,255,255,0.06)',
+} as const
+
+// Only these keys are user-editable here. The download folder is changed
+// through the relocation flow (Change… button), never by "Save".
+type EditableSettings = Pick<AppSettings, 'downloadQuality' | 'checkDepsOnLaunch' | 'editorAutoLockMinutes'>
+function pickEditable(s: AppSettings): EditableSettings {
+  return {
+    downloadQuality: s.downloadQuality ?? 'best',
+    checkDepsOnLaunch: s.checkDepsOnLaunch ?? true,
+    editorAutoLockMinutes: s.editorAutoLockMinutes ?? 10,
+  }
+}
+
 export default function Settings() {
-  const { state, send, setOnFolderSelected } = useAppStore()
-  const { settings, dependencyStatus } = state
-  const [local, setLocal] = useState<AppSettings>({ ...settings })
+  const { state, send } = useAppStore()
+  const { settings, dependencyStatus, lastScan, isScanning, videos, appVersion } = state
+  const [local, setLocal] = useState<EditableSettings>(() => pickEditable(settings))
   const [saved, setSaved] = useState(false)
   const [checkingDeps, setCheckingDeps] = useState(false)
 
   useEffect(() => {
-    setLocal({ ...settings })
+    setLocal(pickEditable(settings))
   }, [settings])
 
-  useEffect(() => {
-    setOnFolderSelected((path: string) => {
-      setLocal(prev => ({ ...prev, downloadFolderPath: path }))
-    })
-    return () => setOnFolderSelected(undefined)
-  }, [setOnFolderSelected])
-
   const handleSave = () => {
-    send({ type: 'saveSettings', payload: local })
+    send({ type: 'saveSettings', payload: { ...settings, ...local } })
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
   }
 
   const handleChangePath = () => {
-    send({ type: 'openFolderPicker' })
+    send({ type: 'chooseLibraryFolder' })
   }
 
   const handleCheckDeps = () => {
@@ -96,7 +112,23 @@ export default function Settings() {
     setTimeout(() => setCheckingDeps(false), 3000)
   }
 
-  const hasChanges = JSON.stringify(local) !== JSON.stringify(settings)
+  const hasChanges = JSON.stringify(local) !== JSON.stringify(pickEditable(settings))
+
+  const counts = useMemo(() => {
+    let total = 0, ready = 0, failed = 0, pending = 0
+    for (const list of Object.values(videos)) {
+      for (const v of list) {
+        total++
+        if (v.downloadState === 'ready') ready++
+        else if (v.downloadState === 'error') failed++
+        else pending++
+      }
+    }
+    return { total, ready, failed, pending }
+  }, [videos])
+
+  const folderPath = settings.downloadFolderPath ?? ''
+  const folderName = folderPath.split('/').filter(Boolean).pop() ?? folderPath
 
   return (
     <div className="screen-enter" style={{
@@ -119,43 +151,46 @@ export default function Settings() {
         width: '100%',
         margin: '0 auto',
       }}>
-        {/* Downloads section */}
+        {/* Library section */}
         <div>
-          <p className="lt-label" style={{ marginBottom: 10 }}>Downloads</p>
-          <div style={{
-            background: 'linear-gradient(135deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.04) 100%)',
-            backgroundColor: 'rgba(20,20,25,0.7)',
-            backdropFilter: 'blur(20px) saturate(180%)',
-            WebkitBackdropFilter: 'blur(20px) saturate(180%)',
-            border: '0.5px solid rgba(255,255,255,0.12)',
-            borderRadius: 14,
-            overflow: 'hidden',
-            boxShadow: '0 4px 16px rgba(0,0,0,0.35), 0 1px 4px rgba(0,0,0,0.2), inset 0 0 0 1px rgba(255,255,255,0.06)',
-          }}>
+          <p className="lt-label" style={{ marginBottom: 10 }}>Library</p>
+          <div style={PANEL_STYLE}>
             <SettingRow
-              label="Download Folder"
-              description="Where LocalTube saves video files"
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                {local.downloadFolderPath && (
-                  <span style={{
-                    fontSize: 12,
-                    color: 'var(--text-secondary)',
+              label="Library Folder"
+              description={
+                <span
+                  title={folderPath}
+                  style={{
                     fontFamily: 'ui-monospace, monospace',
-                    maxWidth: 180,
+                    display: 'block',
+                    maxWidth: 360,
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
                     whiteSpace: 'nowrap',
-                  }}>
-                    {local.downloadFolderPath.split('/').pop() ?? local.downloadFolderPath}
-                  </span>
+                  }}
+                >
+                  {folderPath || 'Not set'}
+                </span>
+              }
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {folderPath && (
+                  <button
+                    className="lt-btn-ghost"
+                    onClick={() => send({ type: 'revealLibraryFolder' })}
+                    style={{ padding: '6px 10px', fontSize: 12 }}
+                    title={`Reveal ${folderName} in Finder`}
+                  >
+                    Show in Finder
+                  </button>
                 )}
                 <button
                   className="lt-btn-secondary"
                   onClick={handleChangePath}
                   style={{ padding: '6px 12px', fontSize: 12 }}
+                  title="Move the library, adopt a folder you moved by hand, or just change where new downloads go"
                 >
-                  Change
+                  Change…
                 </button>
               </div>
             </SettingRow>
@@ -163,8 +198,63 @@ export default function Settings() {
             <Divider />
 
             <SettingRow
+              label="Verify Library"
+              description={
+                <>
+                  {counts.ready} of {counts.total} videos downloaded
+                  {counts.pending > 0 && ` · ${counts.pending} pending`}
+                  {counts.failed > 0 && ` · ${counts.failed} failed`}
+                  <br />
+                  Checks every video file is where the library expects it, repairs
+                  paths after a move, and re-queues anything that's gone missing.
+                </>
+              }
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {counts.failed > 0 && (
+                  <button
+                    className="lt-btn-secondary"
+                    onClick={() => send({ type: 'retryFailedDownloads', payload: {} })}
+                    style={{ padding: '6px 12px', fontSize: 12 }}
+                  >
+                    Retry {counts.failed} failed
+                  </button>
+                )}
+                <button
+                  className="lt-btn-secondary"
+                  onClick={() => send({ type: 'verifyLibrary' })}
+                  disabled={!!isScanning}
+                  style={{ padding: '6px 12px', fontSize: 12 }}
+                >
+                  {isScanning ? (
+                    <>
+                      <svg className="spinner" width="13" height="13" viewBox="0 0 13 13" fill="none">
+                        <circle cx="6.5" cy="6.5" r="5" stroke="rgba(255,255,255,0.2)" strokeWidth="1.5" />
+                        <path d="M6.5 1.5A5 5 0 0 1 11.5 6.5" stroke="var(--text-secondary)" strokeWidth="1.5" strokeLinecap="round" />
+                      </svg>
+                      Scanning…
+                    </>
+                  ) : 'Verify Now'}
+                </button>
+              </div>
+            </SettingRow>
+
+            {lastScan && (
+              <>
+                <Divider />
+                <ScanSummary scan={lastScan} />
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Downloads section */}
+        <div>
+          <p className="lt-label" style={{ marginBottom: 10 }}>Downloads</p>
+          <div style={PANEL_STYLE}>
+            <SettingRow
               label="Download Quality"
-              description="Default quality for new downloads"
+              description="Quality for new downloads. H.264 is preferred so videos play smoothly."
               htmlFor="setting-quality"
             >
               <select
@@ -172,12 +262,28 @@ export default function Settings() {
                 className="lt-input"
                 value={local.downloadQuality}
                 onChange={e => setLocal(prev => ({ ...prev, downloadQuality: e.target.value }))}
-                style={{ width: 180, padding: '7px 32px 7px 12px' }}
+                style={{ width: 220, padding: '7px 32px 7px 12px' }}
               >
                 {QUALITY_OPTIONS.map(opt => (
                   <option key={opt.value} value={opt.value}>{opt.label}</option>
                 ))}
               </select>
+            </SettingRow>
+
+            <Divider />
+
+            <SettingRow
+              label="Check tools on launch"
+              description="Verify yt-dlp and ffmpeg are installed every time LocalTube starts"
+              htmlFor="setting-checkdeps"
+            >
+              <input
+                id="setting-checkdeps"
+                type="checkbox"
+                checked={local.checkDepsOnLaunch ?? true}
+                onChange={e => setLocal(prev => ({ ...prev, checkDepsOnLaunch: e.target.checked }))}
+                style={{ width: 18, height: 18, accentColor: 'var(--accent)' }}
+              />
             </SettingRow>
           </div>
         </div>
@@ -186,16 +292,7 @@ export default function Settings() {
         {/* Dependencies section */}
         <div>
           <p className="lt-label" style={{ marginBottom: 10 }}>Dependencies</p>
-          <div style={{
-            background: 'linear-gradient(135deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.04) 100%)',
-            backgroundColor: 'rgba(20,20,25,0.7)',
-            backdropFilter: 'blur(20px) saturate(180%)',
-            WebkitBackdropFilter: 'blur(20px) saturate(180%)',
-            border: '0.5px solid rgba(255,255,255,0.12)',
-            borderRadius: 14,
-            overflow: 'hidden',
-            boxShadow: '0 4px 16px rgba(0,0,0,0.35), 0 1px 4px rgba(0,0,0,0.2), inset 0 0 0 1px rgba(255,255,255,0.06)',
-          }}>
+          <div style={PANEL_STYLE}>
             <SettingRow
               label="yt-dlp"
               description="YouTube download engine"
@@ -249,20 +346,18 @@ export default function Settings() {
         {/* About */}
         <div>
           <p className="lt-label" style={{ marginBottom: 10 }}>About</p>
-          <div style={{
-            background: 'linear-gradient(135deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.04) 100%)',
-            backgroundColor: 'rgba(20,20,25,0.7)',
-            backdropFilter: 'blur(20px) saturate(180%)',
-            WebkitBackdropFilter: 'blur(20px) saturate(180%)',
-            border: '0.5px solid rgba(255,255,255,0.12)',
-            borderRadius: 14,
-            overflow: 'hidden',
-            boxShadow: '0 4px 16px rgba(0,0,0,0.35), 0 1px 4px rgba(0,0,0,0.2), inset 0 0 0 1px rgba(255,255,255,0.06)',
-          }}>
+          <div style={PANEL_STYLE}>
             <SettingRow label="LocalTube" description="Your offline YouTube library">
               <span style={{ fontSize: 12, color: 'var(--text-tertiary)', fontFamily: 'ui-monospace, monospace' }}>
-                v1.0.0
+                v{appVersion ?? '—'}
               </span>
+            </SettingRow>
+            <Divider />
+            <SettingRow
+              label="Backups"
+              description="A database snapshot is taken before every upgrade and folder move, in Application Support → LocalTube → backups."
+            >
+              <span />
             </SettingRow>
           </div>
         </div>
@@ -289,7 +384,7 @@ export default function Settings() {
             {!saved && (
               <button
                 className="lt-btn-ghost"
-                onClick={() => setLocal({ ...settings })}
+                onClick={() => setLocal(pickEditable(settings))}
                 style={{ fontSize: 13 }}
               >
                 Revert
@@ -311,6 +406,52 @@ export default function Settings() {
             </button>
           </div>
         </div>
+      )}
+    </div>
+  )
+}
+
+function ScanSummary({ scan }: { scan: LibraryScanResult }) {
+  const when = scan.scannedAt ? new Date(scan.scannedAt) : null
+  const problems = scan.missingFiles + scan.partialFiles + scan.orphanFiles + scan.errors.length
+  const items: { label: string; value: string; tone?: 'ok' | 'warn' | 'bad' }[] = [
+    { label: 'Downloaded', value: `${scan.readyVideos} / ${scan.totalVideos}` },
+    { label: 'Paths repaired', value: String(scan.healedPaths + scan.bannersHealed), tone: scan.healedPaths + scan.bannersHealed > 0 ? 'ok' : undefined },
+    { label: 'Missing files', value: scan.requeued > 0 ? `${scan.missingFiles} (${scan.requeued} re-queued)` : String(scan.missingFiles), tone: scan.missingFiles > 0 ? 'warn' : undefined },
+    { label: 'Thumbnails rebuilt', value: String(scan.thumbnailsQueuedForRegeneration) },
+    { label: 'Leftover partial files', value: String(scan.partialFiles), tone: scan.partialFiles > 0 ? 'warn' : undefined },
+    { label: 'Unreferenced files', value: scan.orphanFiles > 0 ? `${scan.orphanFiles} (${formatBytes(scan.orphanBytes)})` : '0', tone: scan.orphanFiles > 0 ? 'warn' : undefined },
+  ]
+  return (
+    <div style={{ padding: '14px 20px 16px' }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 10 }}>
+        <span style={{ fontSize: 13, fontWeight: 600, color: problems > 0 ? '#fde68a' : 'var(--success)' }}>
+          {!scan.folderAvailable
+            ? 'Library folder was not reachable'
+            : problems > 0 ? 'Last scan found things to look at' : 'Last scan: everything in place'}
+        </span>
+        {when && (
+          <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>{when.toLocaleString()}</span>
+        )}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '8px 16px' }}>
+        {items.map(it => (
+          <div key={it.label}>
+            <div style={{ fontSize: 11, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{it.label}</div>
+            <div style={{
+              fontSize: 14,
+              fontWeight: 600,
+              color: it.tone === 'bad' ? '#fca5a5' : it.tone === 'warn' ? '#fde68a' : it.tone === 'ok' ? 'var(--success)' : 'var(--text-primary)',
+            }}>
+              {it.value}
+            </div>
+          </div>
+        ))}
+      </div>
+      {scan.errors.length > 0 && (
+        <ul style={{ margin: '10px 0 0', paddingLeft: 18, fontSize: 12, color: '#fca5a5' }}>
+          {scan.errors.map((e, i) => <li key={i}>{e}</li>)}
+        </ul>
       )}
     </div>
   )

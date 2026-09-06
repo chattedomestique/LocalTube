@@ -96,6 +96,12 @@ final class AppState {
     var needsPINSetup: Bool = false
     var showPINEntry: Bool = false
 
+    /// False when a download folder is configured but currently
+    /// unreachable (external drive unplugged, share offline). The UI shows
+    /// a "library unavailable" screen with Retry / Locate instead of
+    /// onboarding, and downloads pause until it comes back.
+    var libraryFolderAvailable: Bool = true
+
     // MARK: - Downloads
 
     var downloadQueue: [DownloadQueueItem] = []
@@ -127,11 +133,22 @@ final class AppState {
 
     let dependencyService = DependencyService()
     var downloadService = DownloadService()
+    let maintenance = LibraryMaintenanceService()
 
     // MARK: - External hooks (set by WebWindowController)
 
     /// Called every second while editor mode is active with remaining lock seconds.
     var onEditorTimerTick: (@MainActor (Int) -> Void)?
+
+    // MARK: - App info
+
+    /// "1.0.34 (35)" — from the bundle's Info.plist. Shown in Settings → About.
+    static let appVersion: String = {
+        let info = Bundle.main.infoDictionary ?? [:]
+        let short = info["CFBundleShortVersionString"] as? String ?? "dev"
+        let build = info["CFBundleVersion"] as? String ?? "0"
+        return "\(short) (\(build))"
+    }()
 
     // MARK: - Init
 
@@ -141,11 +158,32 @@ final class AppState {
 
     func setup() {
         downloadService.appState = self
+        maintenance.appState = self
         library.undoManager = undoManager
     }
 
     func loadLibrary() async {
         await library.load()
+    }
+
+    /// Library database error from launch, if any (nil = healthy).
+    var libraryLoadError: String? { library.loadError }
+
+    /// Re-checks whether the configured download folder is reachable and
+    /// updates `libraryFolderAvailable`. Returns the new value.
+    @discardableResult
+    func refreshLibraryFolderAvailability() -> Bool {
+        let available: Bool
+        if settings.downloadFolderPath == nil {
+            available = true   // nothing configured yet → onboarding, not "unavailable"
+        } else {
+            available = SettingsService.isDownloadFolderAvailable(settings)
+        }
+        if available != libraryFolderAvailable {
+            AppLogger.info("Library folder availability changed: \(available)")
+        }
+        libraryFolderAvailable = available
+        return available
     }
 
     // MARK: - Library Forwarders
@@ -244,9 +282,27 @@ final class AppState {
     }
 
     func addChannel(_ channel: Channel)         { library.addChannel(channel) }
+
+    /// Removes a channel from the library and deletes its folder
+    /// (videos, thumbnails, banner) from disk. Any in-flight downloads for
+    /// the channel are cancelled first so nothing keeps writing into the
+    /// folder being removed.
     func removeChannel(id: UUID, registerRedo: Bool = false) {
+        guard let channel = channelById(id) else { return }
+        let channelVideoIds = Set(videosForChannel(id).map { $0.id })
+        downloadService.cancelDownloads(forVideoIds: channelVideoIds)
+
+        let others = channels.filter { $0.id != id }
+        let root = settings.downloadFolderPath
+
         library.removeChannel(id: id, registerRedo: registerRedo)
         if editorSelectedChannelId == id { editorSelectedChannelId = nil }
+
+        if let root, !root.isEmpty, SettingsService.isDirectory(atPath: root) {
+            Task {
+                _ = await LibraryMaintenanceService.deleteFolder(for: channel, rootFolder: root, otherChannels: others)
+            }
+        }
     }
     func updateChannel(_ channel: Channel)      { library.updateChannel(channel) }
     func moveChannels(from source: IndexSet, to destination: Int) {
@@ -254,13 +310,42 @@ final class AppState {
     }
 
     func addVideo(_ video: Video)               { library.addVideo(video) }
-    func removeVideo(id: UUID)                  { library.removeVideo(id: id) }
+
+    /// Removes a video from the library and deletes its file, thumbnail
+    /// and any partial download from disk.
+    func removeVideo(id: UUID) {
+        guard let video = videoById(id) else { return }
+        downloadService.cancelDownloads(forVideoIds: [id])
+        let channel = channelById(video.channelId)
+        let root = settings.downloadFolderPath
+        library.removeVideo(id: id)
+        Task {
+            await LibraryMaintenanceService.deleteFiles(for: video, channel: channel, rootFolder: root)
+        }
+    }
     func updateVideo(_ video: Video)            { library.updateVideo(video) }
+    func updateVideoAndPersist(_ video: Video, context: String) {
+        library.updateVideoAndPersist(video, context: context)
+    }
     func moveVideos(in channelId: UUID, from source: IndexSet, to destination: Int) {
         library.moveVideos(in: channelId, from: source, to: destination)
     }
     func updateResumePosition(videoId: UUID, seconds: Double) {
         library.updateResumePosition(videoId: videoId, seconds: seconds)
+    }
+
+    /// Marks a "ready" video whose file has disappeared as queued again and
+    /// puts it back in the download queue. Returns the updated video.
+    @discardableResult
+    func markVideoMissing(_ video: Video) async -> Video? {
+        guard var v = videoById(video.id), let channel = channelById(v.channelId) else { return nil }
+        AppLogger.info("Video file missing, re-queueing: \(v.title)")
+        v.downloadState = .queued
+        v.downloadProgress = 0
+        v.downloadError = nil
+        updateVideoAndPersist(v, context: "mark missing")
+        await downloadService.enqueue(video: v, channel: channel)
+        return videoById(v.id)
     }
 
     // Used by DownloadService / LocalTubeBridge for fire-and-forget DB writes
@@ -321,11 +406,17 @@ final class AppState {
     // MARK: - Channel Sync
 
     /// Fetches the latest video list for a YouTube source channel and adds any
-    /// new videos to the library. Also fetches the channel banner on first sync.
-    /// Errors are caught and stored on Channel.lastSyncError so the UI can
-    /// surface them — they no longer silently disappear into the log.
+    /// new videos to the library. Also re-queues videos whose file has gone
+    /// missing or whose last download failed, and fetches the channel banner
+    /// on first sync. Errors are caught and stored on Channel.lastSyncError
+    /// so the UI can surface them — they no longer silently disappear into
+    /// the log.
     func syncChannel(_ channel: Channel) async {
         guard let ytId = channel.youtubeChannelId, !ytId.isEmpty else { return }
+        guard !syncingChannelIds.contains(channel.id) else {
+            AppLogger.info("syncChannel: \(channel.displayName) already syncing — ignoring")
+            return
+        }
 
         syncingChannelIds.insert(channel.id)
         NotificationCenter.default.post(name: .channelSyncStateChanged, object: nil)
@@ -355,6 +446,9 @@ final class AppState {
             return
         }
 
+        // The channel may have been deleted while yt-dlp was running.
+        guard channelById(channel.id) != nil else { return }
+
         // Success — clear any prior error and stamp lastSyncedAt.
         if var ch = channels.first(where: { $0.id == channel.id }) {
             let now = Date()
@@ -367,10 +461,12 @@ final class AppState {
                 )
             }
         }
-        let existing = videosForChannel(channel.id).map { $0.youtubeVideoId }
-        let existingSet = Set(existing)
 
-        for (i, entry) in entries.enumerated() {
+        // ── New uploads ─────────────────────────────────────────────────
+        let existingSet = Set(videosForChannel(channel.id).map { $0.youtubeVideoId })
+        var nextSortOrder = (videos[channel.id]?.map { $0.sortOrder }.max() ?? -1) + 1
+        var added = 0
+        for entry in entries {
             guard !existingSet.contains(entry.videoId) else { continue }
             let video = Video(
                 channelId: channel.id,
@@ -378,10 +474,22 @@ final class AppState {
                 title: entry.title,
                 durationSeconds: entry.durationSeconds ?? 0,
                 downloadState: .queued,
-                sortOrder: (videos[channel.id]?.count ?? 0) + i
+                sortOrder: nextSortOrder
             )
+            nextSortOrder += 1
+            added += 1
             addVideo(video)
-            Task { await downloadService.enqueue(video: video, channel: channel) }
+            await downloadService.enqueue(video: video, channel: channel)
+        }
+
+        // ── Missing files + failed downloads ────────────────────────────
+        // (a) A ready video whose file is gone from disk goes back in the
+        //     queue. (b) A video whose last download errored gets another
+        //     attempt — transient network failures shouldn't need a
+        //     per-video Retry click.
+        let requeued = await requeueMissingAndFailed(in: channel)
+        if added > 0 || requeued > 0 {
+            AppLogger.info("Sync \(channel.displayName): \(added) new, \(requeued) re-queued (missing/failed)")
         }
 
         // Fetch banner if not already present
@@ -402,6 +510,37 @@ final class AppState {
         }
     }
 
+    /// Re-queues a channel's videos whose file is missing on disk or whose
+    /// last download failed. Returns how many were re-queued.
+    @discardableResult
+    func requeueMissingAndFailed(in channel: Channel) async -> Int {
+        guard libraryFolderAvailable,
+              let root = settings.downloadFolderPath,
+              SettingsService.isDirectory(atPath: root) else { return 0 }
+        let knownRoots = settings.knownLibraryRoots
+        let current = videosForChannel(channel.id)
+        let readyPaths = current
+            .filter { $0.downloadState == .ready }
+            .map { ($0.id, $0.localFilePath) }
+
+        let missingIds: [UUID] = await Task.detached(priority: .utility) {
+            readyPaths
+                .filter { !LibraryMaintenanceService.fileExists(forStored: $0.1, currentRoot: root, knownRoots: knownRoots) }
+                .map { $0.0 }
+        }.value
+
+        var count = 0
+        for id in missingIds {
+            guard let v = videoById(id) else { continue }
+            if await markVideoMissing(v) != nil { count += 1 }
+        }
+        for video in videosForChannel(channel.id) where video.downloadState == .error {
+            await downloadService.retryDownload(video: video, channel: channel)
+            count += 1
+        }
+        return count
+    }
+
     /// Auto-checks source channels for newly uploaded videos. Syncs only
     /// channels whose last successful sync is older than `maxAge` (or that
     /// have never synced), one at a time so we never spawn a burst of yt-dlp
@@ -409,6 +548,10 @@ final class AppState {
     /// downloads, and posts `.channelSyncStateChanged` so the UI keeps up.
     /// Driven on launch and on a daily timer (see AppDelegate).
     func autoSyncStaleChannels(maxAge: TimeInterval) async {
+        guard libraryFolderAvailable else {
+            AppLogger.info("Auto-sync skipped: library folder unavailable")
+            return
+        }
         let now = Date()
         let due = channels.filter { ch in
             guard ch.type == .source, ch.youtubeChannelId?.isEmpty == false else { return false }
@@ -441,4 +584,6 @@ final class AppState {
 extension Notification.Name {
     static let channelBannerUpdated    = Notification.Name("LocalTube.channelBannerUpdated")
     static let channelSyncStateChanged = Notification.Name("LocalTube.channelSyncStateChanged")
+    /// Posted when `libraryFolderAvailable` or the library load error changes.
+    static let libraryStatusChanged    = Notification.Name("LocalTube.libraryStatusChanged")
 }

@@ -11,6 +11,10 @@ import Observation
 // AppState retains forwarding helpers for back-compat — existing call sites
 // like `appState.channels` and `appState.addChannel(_:)` continue to work
 // while new code can call `appState.library.X` directly.
+//
+// This store never touches video files on disk. File deletion lives in
+// AppState.removeVideo / removeChannel (which know the library root) and
+// LibraryMaintenanceService.
 
 @Observable
 @MainActor
@@ -47,6 +51,12 @@ final class LibraryStore {
     }
     private static let activeProfileKey = "lt.activeProfileId"
 
+    /// Set when the database could not be opened or read at launch. The
+    /// UI surfaces this instead of showing an empty library that silently
+    /// loses every subsequent edit.
+    var loadError: String?
+    private(set) var hasLoaded = false
+
     var undoManager: UndoManager?
 
     // MARK: - Lookup
@@ -68,6 +78,10 @@ final class LibraryStore {
 
     func firstThumbnail(for channel: Channel) -> String? {
         videos[channel.id]?.first(where: { !$0.thumbnailPath.isEmpty })?.thumbnailPath
+    }
+
+    var allVideos: [Video] {
+        videos.values.flatMap { $0 }
     }
 
     // MARK: - Load
@@ -100,8 +114,28 @@ final class LibraryStore {
             } else {
                 activeProfileId = nil
             }
+            loadError = nil
+            hasLoaded = true
         } catch {
+            loadError = error.localizedDescription
             AppLogger.error("LibraryStore.load failed: \(error.localizedDescription)")
+        }
+    }
+
+    /// Re-reads channels and videos from the database, replacing the
+    /// in-memory copies. Used after bulk path rewrites (library
+    /// relocation) so memory reflects exactly what was committed.
+    func reloadFromDatabase() async {
+        do {
+            let loaded = try await DatabaseService.shared.fetchAllChannels()
+            var fresh: [UUID: [Video]] = [:]
+            for channel in loaded {
+                fresh[channel.id] = try await DatabaseService.shared.fetchVideos(forChannelId: channel.id)
+            }
+            channels = loaded
+            videos = fresh
+        } catch {
+            AppLogger.error("LibraryStore.reloadFromDatabase failed: \(error.localizedDescription)")
         }
     }
 
@@ -230,6 +264,7 @@ final class LibraryStore {
     }
 
     func addToPlaylist(playlistId: UUID, videoId: UUID) {
+        guard videoById(videoId) != nil else { return }   // FK would reject it anyway
         var list = playlistVideos[playlistId] ?? []
         guard !list.contains(videoId) else { return }   // dedupe
         let position = list.count
@@ -256,10 +291,17 @@ final class LibraryStore {
     }
 
     func reorderPlaylist(playlistId: UUID, videoIds: [UUID]) {
-        playlistVideos[playlistId] = videoIds
+        // Drop ids that don't exist (stale UI) and duplicates, preserving order.
+        var seen = Set<UUID>()
+        let cleaned = videoIds.filter { id in
+            guard videoById(id) != nil, !seen.contains(id) else { return false }
+            seen.insert(id)
+            return true
+        }
+        playlistVideos[playlistId] = cleaned
         Task {
             await persist("reorderPlaylist") {
-                try await DatabaseService.shared.setPlaylistVideos(playlistId: playlistId, videoIds: videoIds)
+                try await DatabaseService.shared.setPlaylistVideos(playlistId: playlistId, videoIds: cleaned)
             }
         }
     }
@@ -287,6 +329,13 @@ final class LibraryStore {
     func removeProfile(id: UUID) {
         profiles.removeAll { $0.id == id }
         profileChannels.removeValue(forKey: id)
+        // The database cascades these; mirror that in memory so the bridge
+        // payload doesn't keep advertising rows that no longer exist.
+        profileFavorites.removeValue(forKey: id)
+        profileHiddenChannels.removeValue(forKey: id)
+        let ownedPlaylists = playlists.filter { $0.profileId == id }.map { $0.id }
+        playlists.removeAll { $0.profileId == id }
+        for plid in ownedPlaylists { playlistVideos.removeValue(forKey: plid) }
         if activeProfileId == id { activeProfileId = nil }
         Task {
             await persist("deleteProfile") {
@@ -296,8 +345,14 @@ final class LibraryStore {
     }
 
     func setProfileChannels(profileId: UUID, channelIds: [UUID]) {
-        profileChannels[profileId] = Set(channelIds)
-        let ids = channelIds
+        // Ignore ids for channels that don't exist (FK would reject them).
+        var seen = Set<UUID>()
+        let ids = channelIds.filter { cid in
+            guard channelById(cid) != nil, !seen.contains(cid) else { return false }
+            seen.insert(cid)
+            return true
+        }
+        profileChannels[profileId] = Set(ids)
         Task {
             await persist("setProfileChannels") {
                 try await DatabaseService.shared.setProfileChannels(
@@ -348,22 +403,43 @@ final class LibraryStore {
         }
     }
 
+    /// A download that was mid-flight when the app last quit goes back to
+    /// "queued" so `DownloadService.resumePendingDownloads()` picks it up
+    /// automatically; yt-dlp resumes the .part file. (Previously these were
+    /// flipped to "error" and needed a manual Retry each.)
     private func healInterruptedDownloads(_ vids: [Video]) async -> [Video] {
         var healed = vids
+        var changed: [Video] = []
         for i in healed.indices where healed[i].downloadState == .downloading {
-            healed[i].downloadState    = .error
-            healed[i].downloadError    = "Download was interrupted — please tap Retry."
+            healed[i].downloadState    = .queued
+            healed[i].downloadError    = nil
             healed[i].downloadProgress = 0
-            AppLogger.info("Healed interrupted download for video \(healed[i].id)")
-            let snapshot = healed[i]
+            AppLogger.info("Re-queued interrupted download for video \(healed[i].id)")
+            changed.append(healed[i])
+        }
+        if !changed.isEmpty {
+            let snapshot = changed
             await persist("heal interrupted") {
-                try await DatabaseService.shared.updateVideo(snapshot)
+                try await DatabaseService.shared.persistVideos(snapshot)
             }
         }
         return healed
     }
 
     // MARK: - Channel CRUD
+
+    /// Returns a folder name derived from `base` that no existing channel
+    /// uses (appending -2, -3, … as needed). Two channels sharing a folder
+    /// would otherwise share — and on delete, destroy — each other's files.
+    func uniqueFolderName(base: String) -> String {
+        let cleaned = base.filter { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" }
+        let root = cleaned.isEmpty ? "channel" : cleaned
+        let taken = Set(channels.map { $0.sanitizedFolderName })
+        if !taken.contains(root) { return root }
+        var n = 2
+        while taken.contains("\(root)-\(n)") { n += 1 }
+        return "\(root)-\(n)"
+    }
 
     func addChannel(_ channel: Channel) {
         channels.append(channel)
@@ -387,15 +463,17 @@ final class LibraryStore {
     func removeChannel(id: UUID, registerRedo: Bool = false) {
         guard let channel = channelById(id) else { return }
         let channelVideos = videos[id] ?? []
+        let removedVideoIds = Set(channelVideos.map { $0.id })
 
         channels.removeAll { $0.id == id }
         videos.removeValue(forKey: id)
+        pruneReferences(toChannel: id, videoIds: removedVideoIds)
 
         if registerRedo {
             undoManager?.registerUndo(withTarget: self) { [ch = channel, vids = channelVideos] target in
                 Task { @MainActor in
                     target.addChannel(ch)
-                    for v in vids { target.videos[ch.id]?.append(v) }
+                    for v in vids { target.addVideo(v) }
                 }
             }
         } else {
@@ -405,6 +483,7 @@ final class LibraryStore {
                     target.videos[ch.id] = vids
                     await target.persist("undo deleteChannel") {
                         try await DatabaseService.shared.insertChannel(ch)
+                        for v in vids { try await DatabaseService.shared.insertVideo(v) }
                     }
                 }
             }
@@ -474,6 +553,7 @@ final class LibraryStore {
     func removeVideo(id: UUID) {
         guard let video = videoById(id) else { return }
         videos[video.channelId]?.removeAll { $0.id == id }
+        pruneReferences(toChannel: nil, videoIds: [id])
 
         undoManager?.registerUndo(withTarget: self) { [v = video] target in
             Task { @MainActor in target.addVideo(v) }
@@ -487,9 +567,22 @@ final class LibraryStore {
         }
     }
 
+    /// In-memory only. Callers that change anything worth surviving a
+    /// relaunch must also persist (or use `updateVideoAndPersist`).
     func updateVideo(_ video: Video) {
         guard let idx = videos[video.channelId]?.firstIndex(where: { $0.id == video.id }) else { return }
         videos[video.channelId]?[idx] = video
+    }
+
+    /// Updates memory and writes the full row to the database.
+    func updateVideoAndPersist(_ video: Video, context: String) {
+        guard videos[video.channelId]?.contains(where: { $0.id == video.id }) == true else { return }
+        updateVideo(video)
+        Task {
+            await persist(context) {
+                try await DatabaseService.shared.updateVideo(video)
+            }
+        }
     }
 
     func moveVideos(in channelId: UUID, from source: IndexSet, to destination: Int) {
@@ -518,6 +611,34 @@ final class LibraryStore {
         Task {
             await persist("updateResumePosition") {
                 try await DatabaseService.shared.updateResumePosition(videoId: videoId, seconds: seconds)
+            }
+        }
+    }
+
+    // MARK: - Reference pruning
+    //
+    // The database cascades deletes through playlist_videos,
+    // profile_favorites, profile_channels and profile_hidden_channels.
+    // Mirror that in memory so the next bridge payload doesn't reference
+    // ids that no longer exist.
+
+    private func pruneReferences(toChannel channelId: UUID?, videoIds: Set<UUID>) {
+        if !videoIds.isEmpty {
+            for (plid, list) in playlistVideos {
+                let filtered = list.filter { !videoIds.contains($0) }
+                if filtered.count != list.count { playlistVideos[plid] = filtered }
+            }
+            for (pid, favs) in profileFavorites {
+                let filtered = favs.subtracting(videoIds)
+                if filtered.count != favs.count { profileFavorites[pid] = filtered }
+            }
+        }
+        if let cid = channelId {
+            for (pid, set) in profileChannels where set.contains(cid) {
+                profileChannels[pid] = set.subtracting([cid])
+            }
+            for (pid, set) in profileHiddenChannels where set.contains(cid) {
+                profileHiddenChannels[pid] = set.subtracting([cid])
             }
         }
     }

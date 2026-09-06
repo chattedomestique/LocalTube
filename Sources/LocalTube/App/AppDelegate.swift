@@ -12,8 +12,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Owned objects
 
-    private var appState: AppState!
-    private var windowController: WebWindowController!
+    // H3 fix: true optionals. Every use goes through a guard so a menu
+    // action arriving before applicationDidFinishLaunching can't crash.
+    private var appState: AppState?
+    private var windowController: WebWindowController?
 
     // Sparkle updater — must be retained for the lifetime of the app.
     // SUFeedURL in Info.plist tells Sparkle where to find the appcast.
@@ -30,6 +32,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private static let autoSyncInterval: TimeInterval = 24 * 60 * 60   // daily
     private var autoSyncTimer: Timer?
 
+    // MARK: - Library folder watch
+    //
+    // While the library folder is unreachable (external drive unplugged),
+    // poll for it every few seconds so the "library unavailable" screen
+    // clears itself the moment the drive is back — no relaunch needed.
+    private static let folderPollInterval: TimeInterval = 5
+    private var folderPollTimer: Timer?
+
     // MARK: - Lifecycle
 
     nonisolated func applicationWillFinishLaunching(_ notification: Notification) {
@@ -37,39 +47,79 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        AppLogger.info("LocalTube launched (PID \(ProcessInfo.processInfo.processIdentifier))")
+        AppLogger.info("LocalTube \(AppState.appVersion) launched (PID \(ProcessInfo.processInfo.processIdentifier))")
 
         // Build app state
-        appState = AppState()
+        let appState = AppState()
+        self.appState = appState
 
         // Wire download service back-reference + load settings
-        bootstrapAppState()
+        bootstrapAppState(appState)
 
         // Build the macOS main menu
         buildMainMenu()
 
         // Create the WebView window (wires up bridge + player overlay)
-        windowController = WebWindowController(appState: appState)
+        let windowController = WebWindowController(appState: appState)
+        self.windowController = windowController
 
         // Show the window and load the React UI
         windowController.window.makeKeyAndOrderFront(nil)
         windowController.loadWebUI()
 
         // Async init: check dependencies + load library, then push state to JS
-        Task {
+        Task { [weak self] in
+            guard let self else { return }
+            let emitter = windowController.bridge.emitter
+
             if appState.settings.checkDepsOnLaunch {
                 await appState.dependencyService.checkAll()
                 appState.dependencyStatus = appState.dependencyService.status
             }
-            await appState.loadLibrary()
-            // After library is loaded, push full state to the WebView
-            windowController.bridge.emitter.emitStateUpdate(appState)
+            // Resolve yt-dlp/ffprobe through `which` once so non-Homebrew
+            // installs work. (Was never called before — the fallback list
+            // silently missed pipx/MacPorts installs and downloads hung.)
+            await appState.downloadService.resolveToolPaths()
 
-            // Check source channels for new uploads now (launch), then daily.
-            await appState.autoSyncStaleChannels(maxAge: Self.autoSyncMaxAge)
-            windowController.bridge.emitter.emitStateUpdate(appState)
-            scheduleDailyAutoSync()
+            await appState.loadLibrary()
+            if let err = appState.libraryLoadError {
+                AppLogger.error("Library failed to load: \(err)")
+            }
+            // After library is loaded, push full state to the WebView
+            emitter.emitStateUpdate(appState)
+
+            if appState.libraryLoadError == nil {
+                await self.startLibraryServices(appState: appState, emitter: emitter)
+            }
+            self.scheduleDailyAutoSync()
         }
+    }
+
+    /// Everything that needs the library folder: verify files on disk
+    /// (healing paths after a move, re-queueing anything that vanished),
+    /// resume downloads left over from the last session, then check
+    /// source channels for new uploads. Skipped — and retried when the
+    /// folder comes back — if the folder is unreachable.
+    private func startLibraryServices(appState: AppState, emitter: BridgeEventEmitter) async {
+        guard appState.refreshLibraryFolderAvailability() else {
+            AppLogger.error("Library folder unavailable at launch: \(appState.settings.downloadFolderPath ?? "<none>")")
+            emitter.emitStateUpdate(appState)
+            startFolderPolling()
+            return
+        }
+        stopFolderPolling()
+
+        if appState.settings.downloadFolderPath != nil {
+            let scan = await appState.maintenance.verify(requeueMissing: true)
+            emitter.emitLibraryScanCompleted(result: scan)
+        }
+
+        await appState.downloadService.resumePendingDownloads()
+        emitter.emitStateUpdate(appState)
+
+        // Check source channels for new uploads now (launch), then daily.
+        await appState.autoSyncStaleChannels(maxAge: Self.autoSyncMaxAge)
+        emitter.emitStateUpdate(appState)
     }
 
     /// Schedules the once-a-day background check for new uploads. Runs only
@@ -87,6 +137,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    private func startFolderPolling() {
+        guard folderPollTimer == nil else { return }
+        folderPollTimer = Timer.scheduledTimer(
+            withTimeInterval: Self.folderPollInterval, repeats: true
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self, let appState = self.appState,
+                      let emitter = self.windowController?.bridge.emitter else { return }
+                let wasAvailable = appState.libraryFolderAvailable
+                let nowAvailable = appState.refreshLibraryFolderAvailability()
+                if nowAvailable && !wasAvailable {
+                    AppLogger.info("Library folder is reachable again — resuming")
+                    emitter.emitStateUpdate(appState)
+                    await self.startLibraryServices(appState: appState, emitter: emitter)
+                }
+            }
+        }
+    }
+
+    private func stopFolderPolling() {
+        folderPollTimer?.invalidate()
+        folderPollTimer = nil
+    }
+
     nonisolated func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         true
     }
@@ -96,6 +170,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             windowController?.window.makeKeyAndOrderFront(nil)
         }
         return true
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        // Stop yt-dlp children. They are not killed automatically when the
+        // parent exits; a survivor would keep writing into the library and
+        // race the resumed download on the next launch.
+        appState?.downloadService.cancelAll()
+        AppLogger.info("LocalTube terminating")
     }
 
     // MARK: - Menu Actions
@@ -111,13 +193,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func toggleEditorMode() {
-        guard let appState else { return }
+        guard let appState, let windowController else { return }
         if appState.appMode == .editor {
             appState.exitEditorMode()
         } else {
             appState.requestEditorMode()
         }
         windowController.bridge.emitter.emitStateUpdate(appState)
+    }
+
+    @objc private func verifyLibrary() {
+        guard let appState, let windowController else { return }
+        let emitter = windowController.bridge.emitter
+        emitter.emitLibraryScanStarted()
+        Task {
+            let result = await appState.maintenance.verify(requeueMissing: true)
+            emitter.emitLibraryScanCompleted(result: result)
+            emitter.emitStateUpdate(appState)
+        }
+    }
+
+    @objc private func revealLibraryFolder() {
+        guard let appState,
+              let path = appState.settings.downloadFolderPath,
+              SettingsService.isDirectory(atPath: path) else { return }
+        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+    }
+
+    @objc private func revealLogs() {
+        guard let logs = try? AppSupportDirectory.logsDirectory() else { return }
+        NSWorkspace.shared.activateFileViewerSelecting([logs])
     }
 
     @objc private func showWindow() {
@@ -182,6 +287,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         viewMenu.addItem(withTitle: "Enter Full Screen", action: #selector(NSWindow.toggleFullScreen(_:)), keyEquivalent: "f")
             .keyEquivalentModifierMask = [.command, .control]
 
+        // ── Library menu ─────────────────────────────────────────────────────
+        let libraryMenuItem = NSMenuItem(title: "Library", action: nil, keyEquivalent: "")
+        mainMenu.addItem(libraryMenuItem)
+        let libraryMenu = NSMenu(title: "Library")
+        libraryMenuItem.submenu = libraryMenu
+
+        libraryMenu.addItem(withTitle: "Verify Library Files", action: #selector(verifyLibrary), keyEquivalent: "")
+            .target = self
+        libraryMenu.addItem(withTitle: "Reveal Library Folder in Finder", action: #selector(revealLibraryFolder), keyEquivalent: "")
+            .target = self
+        libraryMenu.addItem(.separator())
+        libraryMenu.addItem(withTitle: "Reveal Logs in Finder", action: #selector(revealLogs), keyEquivalent: "")
+            .target = self
+
         // ── Window menu ──────────────────────────────────────────────────────
         let windowMenuItem = NSMenuItem(title: "Window", action: nil, keyEquivalent: "")
         mainMenu.addItem(windowMenuItem)
@@ -200,7 +319,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Bootstrap
 
-    private func bootstrapAppState() {
+    private func bootstrapAppState(_ appState: AppState) {
         // Wire download service back-reference
         appState.setup()
 
@@ -208,20 +327,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let settings = SettingsService.load()
         appState.settings = settings
 
-        // Determine onboarding / gating state
+        // Determine onboarding / gating state. A configured-but-unreachable
+        // folder is NOT onboarding — that's the "library unavailable" state.
         appState.isOnboarding   = settings.downloadFolderPath == nil
         appState.needsPINSetup  = !PINService.hasPIN()
+        appState.refreshLibraryFolderAvailability()
 
         // Wire download service event handler → bridge emitter
         appState.downloadService.eventHandler = { [weak self] event in
-            guard let self else { return }
-            let emitter = self.windowController.bridge.emitter
-            let state   = self.appState!
+            guard let self, let windowController = self.windowController,
+                  let state = self.appState else { return }
+            let emitter = windowController.bridge.emitter
             switch event {
             case .progress(let videoId, let progress):
                 emitter.emitDownloadProgress(videoId: videoId.uuidString, progress: progress)
             case .completed(let videoId):
                 emitter.emitDownloadCompleted(videoId: videoId.uuidString)
+                // Full snapshot: the finished video's final paths/duration
+                // plus whichever download became active next.
                 emitter.emitStateUpdate(state)
             case .error(let videoId, let err):
                 emitter.emitDownloadError(videoId: videoId.uuidString, error: err)

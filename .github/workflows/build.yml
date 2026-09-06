@@ -1,17 +1,16 @@
 name: Build
 
 # Compiles the WebUI (Linux) and the Swift app (macOS) on every pull
-# request and on pushes to master. The macOS job also packages
-# LocalTube.app with the repo's own script and uploads it as an artifact,
-# so a PR can be tried without a local toolchain.
+# request. The macOS job also packages LocalTube.app with the repo's own
+# script and uploads it as an artifact, so a PR can be tried without a
+# local toolchain. Pushes to master are handled by release.yml, which
+# builds *and* publishes.
 #
 # macOS runners are billed at 10× Linux minutes on private repos; a full
 # release build with Sparkle is roughly 5–8 minutes.
 
 on:
   pull_request:
-  push:
-    branches: [master]
   workflow_dispatch:
 
 concurrency:

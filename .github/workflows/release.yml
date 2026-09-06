@@ -16,6 +16,10 @@ name: Release
 on:
   push:
     branches: [master]
+    # Documentation-only merges don't deserve a release.
+    paths-ignore:
+      - '**.md'
+      - 'LICENSE'
   workflow_dispatch:
     inputs:
       bump:

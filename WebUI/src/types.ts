@@ -271,6 +271,7 @@ export type BridgeMessage =
   | { type: 'revealLibraryFolder' }
   | { type: 'recheckLibraryFolder' }
   | { type: 'retryFailedDownloads'; payload: { channelId?: string } }
+  | { type: 'checkForUpdates' }
 
 // ─── Navigation ────────────────────────────────────────────────────────────
 export type NavScreen = 'library' | 'channel' | 'settings' | 'editor' | 'profiles'

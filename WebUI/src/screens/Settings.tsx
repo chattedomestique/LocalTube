@@ -354,6 +354,19 @@ export default function Settings() {
             </SettingRow>
             <Divider />
             <SettingRow
+              label="Software Update"
+              description="LocalTube checks for new versions automatically once a day and installs them with your OK."
+            >
+              <button
+                className="lt-btn-secondary"
+                onClick={() => send({ type: 'checkForUpdates' })}
+                style={{ padding: '6px 12px', fontSize: 12 }}
+              >
+                Check for Updates…
+              </button>
+            </SettingRow>
+            <Divider />
+            <SettingRow
               label="Backups"
               description="A database snapshot is taken before every upgrade and folder move, in Application Support → LocalTube → backups."
             >

@@ -437,9 +437,10 @@ final class AppState {
             if var ch = channels.first(where: { $0.id == channel.id }) {
                 ch.lastSyncError = msg
                 updateChannel(ch)
+                let snapshot = ch
                 await persist("syncChannel error") {
                     try await DatabaseService.shared.updateChannelSyncState(
-                        id: ch.id, lastSyncedAt: ch.lastSyncedAt, lastSyncError: msg
+                        id: snapshot.id, lastSyncedAt: snapshot.lastSyncedAt, lastSyncError: msg
                     )
                 }
             }
@@ -455,9 +456,10 @@ final class AppState {
             ch.lastSyncedAt = now
             ch.lastSyncError = nil
             updateChannel(ch)
+            let channelId = ch.id
             await persist("syncChannel success") {
                 try await DatabaseService.shared.updateChannelSyncState(
-                    id: ch.id, lastSyncedAt: now, lastSyncError: nil
+                    id: channelId, lastSyncedAt: now, lastSyncError: nil
                 )
             }
         }

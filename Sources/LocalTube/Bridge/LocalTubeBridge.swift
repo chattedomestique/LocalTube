@@ -764,7 +764,7 @@ final class LocalTubeBridge: NSObject, WKScriptMessageHandler {
     // MARK: - Dependencies
 
     private func handleCheckDependencies() {
-        guard let appState else { return }
+        guard appState != nil else { return }
         Task { [weak self] in
             guard let self, let appState = self.appState else { return }
             await appState.dependencyService.checkAll()

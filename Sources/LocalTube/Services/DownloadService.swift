@@ -395,7 +395,7 @@ final class DownloadService {
         // Fall back to ffmpeg frame extraction only if yt-dlp didn't produce a thumbnail.
         if !FileManager.default.fileExists(atPath: thumbnailPath) {
             AppLogger.info("Falling back to ffmpeg thumbnail for \(video.youtubeVideoId)")
-            try? await ThumbnailService.extract(videoPath: outputPath, outputPath: thumbnailPath)
+            _ = try? await ThumbnailService.extract(videoPath: outputPath, outputPath: thumbnailPath)
         }
 
         updatedVideo.localFilePath = outputPath

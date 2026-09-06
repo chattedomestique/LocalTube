@@ -1,0 +1,116 @@
+name: Build
+
+# Compiles the WebUI (Linux) and the Swift app (macOS) on every pull
+# request. The macOS job also packages LocalTube.app with the repo's own
+# script and uploads it as an artifact, so a PR can be tried without a
+# local toolchain. Pushes to master are handled by release.yml, which
+# builds *and* publishes.
+#
+# macOS runners are billed at 10× Linux minutes on private repos; a full
+# release build with Sparkle is roughly 5–8 minutes.
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  webui:
+    name: WebUI (tsc + vite)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: WebUI
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: WebUI/package-lock.json
+
+      # The lockfile carries a peer-dependency conflict (@tailwindcss/vite
+      # vs vite 8) that `npm ci` refuses by default; the project installs
+      # with legacy peer resolution.
+      - name: Install
+        run: npm ci --legacy-peer-deps --no-audit --no-fund
+
+      - name: Type-check + build
+        run: npm run build
+
+      # The Vite output is committed under Sources/LocalTube/Resources/WebUI
+      # because the Swift bundle embeds it. Flag a stale commit without
+      # failing the job — chunk hashes can legitimately differ between
+      # toolchains.
+      - name: Check committed bundle is current (advisory)
+        continue-on-error: true
+        working-directory: .
+        run: |
+          if ! git diff --quiet -- Sources/LocalTube/Resources/WebUI; then
+            echo "::warning::Committed WebUI bundle differs from a fresh build. Run 'npm run build' in WebUI and commit Sources/LocalTube/Resources/WebUI."
+            git status --short -- Sources/LocalTube/Resources/WebUI
+          fi
+
+  macos:
+    name: macOS app (swift build + package)
+    # Package.swift is swift-tools-version 6.0 → needs Xcode 16 / Swift 6.
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: |
+          sw_vers
+          xcodebuild -version
+          swift --version
+
+      - name: Cache SwiftPM
+        uses: actions/cache@v4
+        with:
+          path: .build
+          key: spm-${{ runner.os }}-${{ hashFiles('Package.resolved') }}
+          restore-keys: spm-${{ runner.os }}-
+
+      - name: Resolve dependencies
+        run: swift package resolve
+
+      # Debug build first: fastest way to surface compile errors with
+      # full diagnostics before the release build + packaging.
+      - name: Build (debug)
+        run: |
+          set -o pipefail
+          swift build -c debug 2>&1 | tee build-debug.log
+
+      - name: Package release app
+        env:
+          SIGNING_MODE: adhoc
+        run: |
+          set -o pipefail
+          Scripts/package_app.sh release 2>&1 | tee build-release.log
+          test -x LocalTube.app/Contents/MacOS/LocalTube
+          test -f LocalTube.app/Contents/Resources/WebUI/index.html || test -f LocalTube.app/Contents/Resources/Resources/WebUI/index.html
+          codesign --verify --deep --strict LocalTube.app
+          ditto -ck --keepParent LocalTube.app LocalTube-ci.zip
+
+      - name: Upload app
+        uses: actions/upload-artifact@v4
+        with:
+          name: LocalTube-${{ github.sha }}
+          path: LocalTube-ci.zip
+          retention-days: 14
+
+      - name: Upload build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs-${{ github.sha }}
+          path: |
+            build-debug.log
+            build-release.log
+          if-no-files-found: ignore
+          retention-days: 7

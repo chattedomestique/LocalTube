@@ -10,9 +10,12 @@ import Settings from './screens/Settings'
 import Editor from './screens/Editor'
 import Profiles from './screens/Profiles'
 import ProfilePicker from './screens/ProfilePicker'
+import LibraryUnavailable from './screens/LibraryUnavailable'
 import EditorShell from './components/EditorShell'
 import MountWithExit from './components/MountWithExit'
 import QueueTray from './components/QueueTray'
+import RelocateLibraryModal from './components/RelocateLibraryModal'
+import ToastHost from './components/ToastHost'
 
 // H6 fix: React error boundary prevents a white screen on uncaught render errors.
 // Shows a recoverable error UI and logs the error to Swift via the bridge.
@@ -98,9 +101,38 @@ class ErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryStat
 // active.
 const EDITOR_TAB_SCREENS = new Set(['editor', 'profiles', 'settings'])
 
+/** The SQLite database couldn't be opened — nothing the app does would be
+    saved, so say so loudly instead of showing an empty library. */
+function LibraryLoadError({ message }: { message: string }) {
+  return (
+    <div role="alert" style={{
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      height: '100%',
+      gap: 14,
+      padding: 40,
+      textAlign: 'center',
+      background: 'var(--bg)',
+    }}>
+      <h1 style={{ fontSize: 30, fontWeight: 800 }}>Library database could not be opened</h1>
+      <p style={{ fontSize: 16, color: 'var(--text-secondary)', maxWidth: 560, lineHeight: 1.5 }}>
+        LocalTube can't read its library database, so changes would not be saved.
+        Quit and relaunch; if this keeps happening, restore a snapshot from
+        <code style={{ fontFamily: 'ui-monospace, monospace' }}> ~/Library/Application Support/LocalTube/backups</code>.
+      </p>
+      <code style={{ fontSize: 13, color: '#fca5a5', fontFamily: 'ui-monospace, monospace', maxWidth: 640 }}>{message}</code>
+    </div>
+  )
+}
+
 function AppContent() {
-  const { state, nav, navigateTo } = useAppStore()
-  const { isOnboarding, needsPINSetup, showPINEntry, appMode, profiles, activeProfileId } = state
+  const { state, nav, navigateTo, libraryUI } = useAppStore()
+  const {
+    isOnboarding, needsPINSetup, showPINEntry, appMode, profiles, activeProfileId,
+    libraryFolderAvailable, libraryLoadError,
+  } = state
 
   // Eagerly decode every thumbnail in the catalog at the app root, once
   // per video. By the time any card mounts its image is already cached +
@@ -122,12 +154,28 @@ function AppContent() {
   }, [appMode, nav.screen, navigateTo])
 
   // Full-screen flows
+  if (libraryLoadError) {
+    return <LibraryLoadError message={libraryLoadError} />
+  }
+
   if (isOnboarding) {
     return <Onboarding />
   }
 
   if (needsPINSetup) {
     return <PINSetup />
+  }
+
+  // Configured folder is unreachable (drive unplugged). Block everything
+  // — playback, downloads, edits — until it's back or relocated.
+  if (!libraryFolderAvailable) {
+    return (
+      <>
+        <LibraryUnavailable />
+        {libraryUI.pendingFolderAnalysis && <RelocateLibraryModal />}
+        <ToastHost />
+      </>
+    )
   }
 
   // Render the current screen.
@@ -179,6 +227,8 @@ function AppContent() {
       <MountWithExit show={showPINEntry}>
         <PINEntry />
       </MountWithExit>
+      {libraryUI.pendingFolderAnalysis && <RelocateLibraryModal />}
+      <ToastHost />
     </>
   )
 }

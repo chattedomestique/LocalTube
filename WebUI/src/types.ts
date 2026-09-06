@@ -38,10 +38,15 @@ export interface Channel {
   lastSyncError?: string
 }
 
+/** Mirrors Swift `DownloadQuality.rawValue`. */
+export type DownloadQuality = 'best' | '1080p' | '720p' | '480p' | '360p' | 'audio'
+
 export interface AppSettings {
+  /** Read-only from the UI's point of view — changed via the relocation flow. */
   downloadFolderPath?: string
   editorAutoLockMinutes: number
-  downloadQuality: string
+  downloadQuality: DownloadQuality | string
+  checkDepsOnLaunch?: boolean
 }
 
 export interface Profile {
@@ -69,6 +74,56 @@ export interface Playlist {
   createdAt: string
 }
 
+// ─── Library maintenance ───────────────────────────────────────────────────
+/** Result of a "Verify Library" rescan (Swift `LibraryScanResult`). */
+export interface LibraryScanResult {
+  scannedAt: string
+  folderAvailable: boolean
+  totalVideos: number
+  readyVideos: number
+  healedPaths: number
+  missingFiles: number
+  requeued: number
+  thumbnailsQueuedForRegeneration: number
+  orphanFiles: number
+  orphanBytes: number
+  partialFiles: number
+  bannersHealed: number
+  errors: string[]
+}
+
+/** What Swift learned about a folder the user picked (Swift `LibraryFolderAnalysis`). */
+export interface LibraryFolderAnalysis {
+  path: string
+  exists: boolean
+  writable: boolean
+  isCurrentRoot: boolean
+  isInsideCurrentRoot: boolean
+  containsCurrentRoot: boolean
+  matchingChannelFolders: number
+  totalChannels: number
+  libraryVideoCount: number
+  libraryReadyCount: number
+  freeBytes: number
+  libraryBytes: number
+  canMove: boolean
+  canAdopt: boolean
+}
+
+export type LibraryRelocationMode = 'move' | 'adopt' | 'switch'
+
+export interface LibraryRelocationResult {
+  ok: boolean
+  mode: LibraryRelocationMode
+  newRoot: string
+  movedChannels: number
+  rewrittenPaths: number
+  failedChannels: string[]
+  message: string
+}
+
+export type ToastKind = 'info' | 'success' | 'warning' | 'error'
+
 // ─── App Mode ──────────────────────────────────────────────────────────────
 export type AppMode = 'viewer' | 'editor'
 
@@ -90,6 +145,8 @@ export interface AppState {
     progress: number
     title: string
   }
+  /** Queue entries still waiting for / holding a download slot. */
+  pendingDownloadCount?: number
   // editorRemainingSeconds removed with the auto-lock timer in the
   // editing-model redesign. Kept on the wire payload as a constant 0
   // for transitional safety; not exposed in the React state shape.
@@ -115,6 +172,16 @@ export interface AppState {
       the now-playing highlight in the queue tray. Undefined when the
       player is closed. */
   nowPlayingVideoId?: string
+  /** False when a download folder is configured but currently unreachable
+      (external drive unplugged). The app shows LibraryUnavailable. */
+  libraryFolderAvailable: boolean
+  /** Set when the SQLite database could not be opened at launch. */
+  libraryLoadError?: string
+  /** "1.0.34 (35)" from the bundle. */
+  appVersion?: string
+  isScanning?: boolean
+  isRelocating?: boolean
+  lastScan?: LibraryScanResult
 }
 
 // ─── Bridge Events (Swift → JS) ────────────────────────────────────────────
@@ -125,9 +192,16 @@ export type BridgeEvent =
   | { type: 'downloadCompleted'; payload: { videoId: string } }
   | { type: 'downloadError';     payload: { videoId: string; error: string } }
   | { type: 'folderSelected';    payload: { path: string } }
-  | { type: 'pinValidated';      payload: { valid: boolean } }
+  | { type: 'pinValidated';      payload: { valid: boolean; lockoutSeconds?: number } }
+  | { type: 'toast';             payload: { message: string; kind?: ToastKind } }
   // editorTimerTick removed with the auto-lock timer.
   | { type: 'navigateTo';        payload: NavState }
+  // Library management
+  | { type: 'libraryFolderPicked';       payload: { cancelled: boolean; analysis?: LibraryFolderAnalysis } }
+  | { type: 'libraryRelocationProgress'; payload: { done: number; total: number; channel: string } }
+  | { type: 'libraryRelocated';          payload: LibraryRelocationResult }
+  | { type: 'libraryScanStarted';        payload: Record<string, never> }
+  | { type: 'libraryScanCompleted';      payload: LibraryScanResult }
   // Targeted diff events — emitted instead of full stateUpdate when only
   // a single slice changed. The React reducer applies them as O(1) patches.
   | { type: 'channelUpserted';   payload: { channel: Channel } }
@@ -190,6 +264,13 @@ export type BridgeMessage =
   | { type: 'reorderPlaylist';     payload: { playlistId: string; videoIds: string[] } }
   | { type: 'clearPlaylist';       payload: { playlistId: string } }
   | { type: 'setAutoPlaybackMode'; payload: { profileId: string; mode: string } }
+  // Library management
+  | { type: 'chooseLibraryFolder' }
+  | { type: 'relocateLibrary';     payload: { path: string; mode: LibraryRelocationMode } }
+  | { type: 'verifyLibrary' }
+  | { type: 'revealLibraryFolder' }
+  | { type: 'recheckLibraryFolder' }
+  | { type: 'retryFailedDownloads'; payload: { channelId?: string } }
 
 // ─── Navigation ────────────────────────────────────────────────────────────
 export type NavScreen = 'library' | 'channel' | 'settings' | 'editor' | 'profiles'

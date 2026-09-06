@@ -4,6 +4,22 @@ import SQLite3
 // MARK: - Database Migrations
 
 enum DatabaseMigrations {
+    /// The schema version this build writes. Bump alongside a new
+    /// migration. `DatabaseService.open()` snapshots the database before
+    /// running any migration so a previous build can be restored.
+    ///
+    /// Rollback contract: migrations are append-only and purely additive
+    /// (new tables, or new columns with defaults). An older build opening
+    /// a newer database sees `user_version > latestVersion`, skips every
+    /// migration, and keeps working because its INSERTs never have to
+    /// supply the newer columns.
+    static let latestVersion = 9
+
+    /// Current on-disk schema version (0 for a brand-new file).
+    static func currentVersion(db: OpaquePointer) -> Int {
+        getUserVersion(db: db)
+    }
+
     static func run(db: OpaquePointer) throws {
         let currentVersion = getUserVersion(db: db)
         if currentVersion < 1 {

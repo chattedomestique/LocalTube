@@ -1,0 +1,121 @@
+name: Release
+
+# Turnkey release: every merge to master (or a manual run) bumps the
+# version, builds and packages LocalTube.app on a macOS runner, signs the
+# zip for Sparkle, publishes a GitHub Release with the zip attached, and
+# updates appcast.xml on master so installed copies pick it up via
+# "Check for Updates…".
+#
+# Required secret:  SPARKLE_PRIVATE_KEY  (see RELEASING.md). Without it the
+#                   release is still published for manual download, but no
+#                   appcast entry is written.
+# Optional secret:  GIST_TOKEN — token with the `gist` scope, used to mirror
+#                   the appcast to the legacy Gist feed that builds <= 1.0.33
+#                   check.
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Version bump
+        type: choice
+        default: patch
+        options: [patch, minor, major]
+      notes:
+        description: Release notes (optional)
+        type: string
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build, sign, publish
+    # The release commit itself is pushed with GITHUB_TOKEN, which never
+    # re-triggers workflows; this guard is belt-and-braces for manual pushes
+    # of a "Release x.y.z" commit.
+    if: github.event_name == 'workflow_dispatch' || !startsWith(github.event.head_commit.message, 'Release ')
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Toolchain
+        run: |
+          sw_vers
+          xcodebuild -version
+          swift --version
+          gh --version
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: WebUI/package-lock.json
+
+      - name: Build WebUI
+        working-directory: WebUI
+        run: |
+          npm ci --legacy-peer-deps --no-audit --no-fund
+          npm run build
+
+      - name: Cache SwiftPM
+        uses: actions/cache@v4
+        with:
+          path: .build
+          key: spm-${{ runner.os }}-${{ hashFiles('Package.resolved') }}
+          restore-keys: spm-${{ runner.os }}-
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Release
+        id: release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+          GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
+          RELEASE_NOTES: ${{ github.event.inputs.notes }}
+          REPO_SLUG: ${{ github.repository }}
+        run: |
+          set -o pipefail
+          Scripts/release.sh "${{ github.event.inputs.bump || 'patch' }}" 2>&1 | tee release.log
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## LocalTube ${{ steps.release.outputs.version || 'release' }}"
+            echo ""
+            if [ -n "${{ steps.release.outputs.tag }}" ]; then
+              echo "- Tag: \`${{ steps.release.outputs.tag }}\` (build ${{ steps.release.outputs.build }})"
+              echo "- Release: https://github.com/${{ github.repository }}/releases/tag/${{ steps.release.outputs.tag }}"
+              echo "- Sparkle-signed: ${{ steps.release.outputs.signed }}"
+            else
+              echo "Release step did not complete — see the log artifact."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload app + log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: LocalTube-release-${{ steps.release.outputs.version || github.run_number }}
+          path: |
+            LocalTube-*.zip
+            release.log
+          if-no-files-found: ignore
+          retention-days: 30

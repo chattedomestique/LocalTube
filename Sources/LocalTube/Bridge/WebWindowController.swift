@@ -20,6 +20,7 @@ final class WebWindowController: NSObject, NSWindowDelegate {
     let bridge: LocalTubeBridge
     private let webView: WKWebView
     private let playerOverlay: PlayerOverlayController
+    private var notificationTokens: [NSObjectProtocol] = []
 
     // MARK: - Init
 
@@ -28,8 +29,21 @@ final class WebWindowController: NSObject, NSWindowDelegate {
 
         let config = WKWebViewConfiguration()
 
-        // Register custom URL scheme for serving local thumbnails
-        config.setURLSchemeHandler(ThumbnailURLSchemeHandler(), forURLScheme: "localtube-thumb")
+        // Register custom URL scheme for serving local thumbnails. Only
+        // files under the library root(s) are served — see the handler.
+        // WebKit invokes scheme handlers on the main thread, so reading
+        // main-actor state via assumeIsolated is safe here.
+        let thumbHandler = ThumbnailURLSchemeHandler { [weak appState] in
+            MainActor.assumeIsolated {
+                guard let appState else { return [] }
+                var roots = appState.settings.knownLibraryRoots
+                if let current = appState.settings.downloadFolderPath, !current.isEmpty {
+                    roots.append(current)
+                }
+                return roots
+            }
+        }
+        config.setURLSchemeHandler(thumbHandler, forURLScheme: "localtube-thumb")
 
         // Expose the JS bridge message handler
         let bridge = LocalTubeBridge()
@@ -117,6 +131,8 @@ final class WebWindowController: NSObject, NSWindowDelegate {
         window.title = "LocalTube"
         window.minSize = NSSize(width: 900, height: 600)
         window.center()
+        // Remember size/position between launches.
+        window.setFrameAutosaveName("LocalTubeMainWindow")
 
         // WKWebView fills the content area below the native title bar
         window.contentView = webView
@@ -152,27 +168,55 @@ final class WebWindowController: NSObject, NSWindowDelegate {
         // Register console relay handler
         config.userContentController.add(ConsoleMessageHandler(), name: "LocalTubeConsole")
 
+        // Background maintenance → React. Thumbnail regeneration trickles
+        // in per video; relocation reports per-channel progress.
+        appState.maintenance.onVideosUpdated = { [weak bridge] videos in
+            guard let bridge else { return }
+            let grouped = Dictionary(grouping: videos, by: { $0.channelId })
+            for (channelId, vids) in grouped {
+                bridge.emitter.emitVideosUpserted(channelId: channelId, videos: vids)
+            }
+        }
+        appState.maintenance.onRelocationProgress = { [weak bridge] done, total, channel in
+            bridge?.emitter.emitLibraryRelocationProgress(done: done, total: total, channel: channel)
+        }
+
         // Re-emit full state update whenever a channel banner is fetched in the background.
-        NotificationCenter.default.addObserver(
+        notificationTokens.append(NotificationCenter.default.addObserver(
             forName: .channelBannerUpdated,
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            guard let self, let appState = self.bridge.appState else { return }
-            self.bridge.emitter.emitStateUpdate(appState)
-        }
+            Task { @MainActor [weak self] in
+                guard let self, let appState = self.bridge.appState else { return }
+                self.bridge.emitter.emitStateUpdate(appState)
+            }
+        })
 
         // Re-emit state whenever a channel sync starts or finishes,
         // so the UI can show/hide the syncing indicator.
-        NotificationCenter.default.addObserver(
+        notificationTokens.append(NotificationCenter.default.addObserver(
             forName: .channelSyncStateChanged,
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            guard let self, let appState = self.bridge.appState else { return }
-            self.bridge.emitter.emitStateUpdate(appState)
-        }
+            Task { @MainActor [weak self] in
+                guard let self, let appState = self.bridge.appState else { return }
+                self.bridge.emitter.emitStateUpdate(appState)
+            }
+        })
 
+        // Library folder availability / load errors.
+        notificationTokens.append(NotificationCenter.default.addObserver(
+            forName: .libraryStatusChanged,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self, let appState = self.bridge.appState else { return }
+                self.bridge.emitter.emitStateUpdate(appState)
+            }
+        })
     }
 
     // C7 fix: Remove script message handlers to break the
@@ -181,6 +225,9 @@ final class WebWindowController: NSObject, NSWindowDelegate {
         let ucc = webView.configuration.userContentController
         ucc.removeScriptMessageHandler(forName: "LocalTubeBridge")
         ucc.removeScriptMessageHandler(forName: "LocalTubeConsole")
+        for token in notificationTokens {
+            NotificationCenter.default.removeObserver(token)
+        }
     }
 
     // MARK: - Load

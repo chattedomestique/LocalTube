@@ -6,8 +6,19 @@ export default function PINEntry() {
   const [pin, setPin] = useState('')
   const [shaking, setShaking] = useState(false)
   const [error, setError] = useState(false)
+  const [lockoutSeconds, setLockoutSeconds] = useState(0)
   const [focusedIdx, setFocusedIdx] = useState(-1)
   const inputRef = useRef<HTMLInputElement>(null)
+
+  // Count the lockout down locally so the message stays accurate without
+  // another round-trip to Swift.
+  useEffect(() => {
+    if (lockoutSeconds <= 0) return
+    const id = window.setInterval(() => {
+      setLockoutSeconds(s => (s <= 1 ? 0 : s - 1))
+    }, 1000)
+    return () => window.clearInterval(id)
+  }, [lockoutSeconds])
 
   const digits = pin.split('').concat(Array(4).fill('')).slice(0, 4)
   const cursorIdx = Math.min(pin.length, 3)
@@ -18,10 +29,11 @@ export default function PINEntry() {
   }, [])
 
   useEffect(() => {
-    setOnPINValidated((valid: boolean) => {
+    setOnPINValidated((valid: boolean, lockout: number) => {
       if (!valid) {
         setShaking(true)
         setError(true)
+        setLockoutSeconds(lockout)
         setPin('')
         setTimeout(() => setShaking(false), 600)
       }
@@ -30,33 +42,37 @@ export default function PINEntry() {
   }, [setOnPINValidated])
 
   // C5 fix: Auto-submit when 4 digits are entered, then immediately
-  // clear the PIN from component state to minimize exposure.
-  useEffect(() => {
-    if (pin.length === 4) {
-      const pinValue = pin
+  // clear the PIN from component state to minimize exposure. The submit
+  // happens straight from the input handler (no effect → no double-send
+  // under StrictMode, which would burn two PIN attempts per entry).
+  const commitPin = useCallback((next: string) => {
+    if (next.length >= 4) {
       setPin('')
-      send({ type: 'validatePIN', payload: { pin: pinValue } })
+      send({ type: 'validatePIN', payload: { pin: next.slice(0, 4) } })
+    } else {
+      setPin(next)
     }
-  }, [pin, send])
+  }, [send])
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
       if (e.key === 'Backspace') {
-        setPin(prev => prev.slice(0, -1))
+        commitPin(pin.slice(0, -1))
         setError(false)
       }
     },
-    []
+    [commitPin, pin]
   )
 
   const handleInput = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const raw = e.target.value.replace(/\D/g, '')
-      setPin(prev => (prev + raw).slice(0, 4))
-      setError(false)
       e.target.value = ''
+      setError(false)
+      if (lockoutSeconds > 0) return   // refused until the lockout expires
+      commitPin(pin + raw)
     },
-    []
+    [commitPin, pin, lockoutSeconds]
   )
 
   const handleCancel = () => {
@@ -201,7 +217,9 @@ export default function PINEntry() {
               <circle cx="7" cy="10" r="0.75" fill="#f87171" />
             </svg>
             <span style={{ fontSize: 13, color: 'var(--destructive)' }}>
-              Incorrect PIN — please try again
+              {lockoutSeconds > 0
+                ? `Too many attempts — try again in ${lockoutSeconds}s`
+                : 'Incorrect PIN — please try again'}
             </span>
           </div>
         )}

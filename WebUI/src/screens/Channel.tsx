@@ -222,6 +222,10 @@ export default function Channel() {
     () => sortedVideos.filter(v => v.downloadState === 'ready').length,
     [sortedVideos]
   )
+  const failedCount = useMemo(
+    () => sortedVideos.filter(v => v.downloadState === 'error').length,
+    [sortedVideos]
+  )
 
   const favoriteIds = useMemo(
     () => new Set(activeProfileId ? (profileFavorites[activeProfileId] ?? []) : []),
@@ -568,6 +572,22 @@ export default function Channel() {
                 <path d="M4 7.5L2 9.5L4 11.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
               {channel.lastSyncError ? 'Retry Sync' : 'Sync'}
+            </button>
+          )}
+
+          {/* Retry every failed download in this channel (editor) */}
+          {isEditor && failedCount > 0 && (
+            <button
+              className="lt-btn-secondary"
+              onClick={() => send({ type: 'retryFailedDownloads', payload: { channelId: channel.id } })}
+              style={{ padding: '6px 12px', fontSize: 16 }}
+              title="Put every failed video back in the download queue"
+            >
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+                <path d="M1.5 6.5A5 5 0 0 1 11 3.5M11.5 6.5A5 5 0 0 1 2 9.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                <path d="M9 1.5L11 3.5L9 5.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              Retry {failedCount} failed
             </button>
           )}
 

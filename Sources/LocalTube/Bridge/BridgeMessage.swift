@@ -3,6 +3,7 @@ import Foundation
 // MARK: - Bridge Message Types (JS → Swift)
 //
 // Each message from the WKWebView has a `type` string and optional `payload` dictionary.
+// Mirror any change here in WebUI/src/types.ts (BridgeMessage).
 
 enum BridgeMessageType: String, Decodable {
     case getState
@@ -46,6 +47,23 @@ enum BridgeMessageType: String, Decodable {
     case clearPlaylist
     // Playback
     case setAutoPlaybackMode
+    // Library management
+    /// Settings → "Change…": opens a folder picker and replies with
+    /// `libraryFolderPicked` carrying an analysis of the chosen folder so
+    /// the UI can offer Move / Adopt / Switch.
+    case chooseLibraryFolder
+    /// `{ path, mode: "move" | "adopt" | "switch" }` — performs the
+    /// relocation, replies with `libraryRelocated`.
+    case relocateLibrary
+    /// Rescan the library folder; replies with `libraryScanCompleted`.
+    case verifyLibrary
+    /// Reveal the library folder in Finder.
+    case revealLibraryFolder
+    /// The "library unavailable" screen's Retry: re-check the folder and,
+    /// if it is back, resume downloads.
+    case recheckLibraryFolder
+    /// `{ channelId? }` — retry every failed download (optionally one channel).
+    case retryFailedDownloads
 }
 
 struct BridgeMessage: Decodable {

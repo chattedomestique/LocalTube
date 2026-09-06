@@ -39,3 +39,6 @@ sparkle_private_key
 
 # Logs
 *.log
+
+# Claude Code worktrees (local scratch checkouts — never a submodule)
+.claude/worktrees/

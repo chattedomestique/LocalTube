@@ -58,9 +58,11 @@ controls (gear menu or similar).
 ### ★ Refresh channel for missing/new videos [P0]
 Current `Sync` button checks for new videos but doesn't re-download videos
 that previously failed or were deleted on disk.
-- [ ] Extend sync to also: (a) requeue any video whose `localFilePath`
+- [x] Extend sync to also: (a) requeue any video whose `localFilePath`
       no longer exists on disk, (b) requeue videos in `error` state.
-- [ ] Show count: "Re-downloading 3 missing videos."
+      (`AppState.requeueMissingAndFailed` — see AUDIT_2026-09.md)
+- [x] Show count — logged per sync; Settings → Library shows pending /
+      failed counts and the last Verify result.
 
 **Approach.** After `ChannelSyncService.fetchVideoList` succeeds, walk
 existing videos: stat `localFilePath`, if missing → flip to `.queued`
@@ -119,8 +121,9 @@ Right now search only matches `title`. We don't store tags yet.
       assigned channels.
 
 ### Background channel sync [P2]
-- [ ] Periodic re-sync of all source channels every N hours while the
-      app is open (configurable; default 6h).
+- [x] Periodic re-sync of all source channels while the app is open
+      (daily, plus a launch-time check; `AppDelegate.autoSync*`).
+- [ ] Configurable interval.
 - [ ] Manual setting: "Auto-sync interval".
 - [ ] Visible "Last synced" timestamp on each channel card (we already
       store `lastSyncedAt`).
@@ -154,19 +157,16 @@ Right now search only matches `title`. We don't store tags yet.
 - [ ] **Reduce-motion not respected.** `NSWorkspace.shouldReduceMotion`
       is checked in one place (player controls); audit React side too —
       respect `prefers-reduced-motion`.
-- [ ] **Channel file cleanup on delete.** Deleting a channel removes
-      the DB row but leaves `/<rootFolder>/<channel-name>/` on disk
-      (videos + thumbs + banner). Should it? Add a confirm option
-      "Also delete downloaded files".
-- [ ] **Download queue never clears completed entries.** `downloadQueue`
-      grows forever within a session (it's in-memory only, so it resets
-      on next launch). Trim completed > N minutes old.
+- [x] **Channel file cleanup on delete.** Channel folder goes to the
+      Trash; video delete removes file + thumbnail + `.part` leftovers.
+      (The confirm dialogs already promised this.)
+- [x] **Download queue never clears completed entries.** Finished
+      entries are trimmed to the most recent 100.
 - [ ] **Empty-search state.** When search returns zero results, the
       "Clear Search" button is there but the messaging could be
       friendlier.
-- [ ] **Channel banner upload doesn't show error feedback** if the
-      copy fails. Surface via the same banner pattern we now have for
-      sync errors.
+- [x] **Channel banner upload doesn't show error feedback** — now a
+      toast via the `toast` bridge event.
 
 ---
 
@@ -224,11 +224,10 @@ Right now search only matches `title`. We don't store tags yet.
       `curl | bash` (in `DependencyService.installMissing`). Either
       bundle binaries OR verify a SHA-256 against a hardcoded hash
       before executing.
-- [ ] **M3** — `ShellRunner.run` has a timeout but `ShellRunner.stream`
-      doesn't. Long-running yt-dlp commands can hang forever. Add a
-      `cancelToken` + heartbeat.
-- [ ] **H3** — `AppDelegate` uses force-unwrapped `appState!` /
-      `windowController!`. Convert to true optionals + nil guards.
+- [x] **M3** — `ShellRunner.stream` has an inactivity watchdog
+      (downloads: 10 min); `run` now kills the process on timeout and no
+      longer deadlocks on >64 KB of output.
+- [x] **H3** — `AppDelegate` uses true optionals + guards.
 
 ### Logging
 - [ ] **AppLogger** lines are uncategorised. Add a category param
@@ -247,6 +246,16 @@ Right now search only matches `title`. We don't store tags yet.
       is smaller.
 
 ---
+
+## Library maintenance (added Sept 2026 — see AUDIT_2026-09.md)
+
+- [ ] Offer to clean up leftover `.part` / unreferenced files from the
+      Verify result (currently reported only).
+- [ ] Import unreferenced `.mp4` files found in a channel folder as
+      videos (needs the YouTube id — parse it from a `.info.json` if we
+      start writing one with `--write-info-json`).
+- [ ] Relocation progress per file (currently per channel).
+- [ ] Unit tests for `LibraryPaths` and `DatabaseService.rewritePathPrefix`.
 
 ## Notes on approach
 

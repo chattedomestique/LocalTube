@@ -27,6 +27,16 @@ final class DownloadQueueItem: Identifiable {
     /// Live process handle — used for cancellation.
     var activeProcess: Process?
 
+    /// True while the item still needs a download slot (waiting) or holds
+    /// one (active). Finished entries — completed, failed, cancelled — are
+    /// kept for display only and never block a re-enqueue.
+    var isLive: Bool {
+        switch state {
+        case .waiting, .active: return true
+        case .completed, .failed, .cancelled: return false
+        }
+    }
+
     init(
         videoId: UUID,
         videoTitle: String,

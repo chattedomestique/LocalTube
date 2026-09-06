@@ -140,6 +140,10 @@ final class AppState {
     /// Called every second while editor mode is active with remaining lock seconds.
     var onEditorTimerTick: (@MainActor (Int) -> Void)?
 
+    /// Triggers a Sparkle update check. Set by AppDelegate, invoked from the
+    /// Settings → About button through the bridge.
+    var checkForUpdatesHandler: (@MainActor () -> Void)?
+
     // MARK: - App info
 
     /// "1.0.34 (35)" — from the bundle's Info.plist. Shown in Settings → About.

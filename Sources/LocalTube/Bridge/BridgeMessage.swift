@@ -64,6 +64,8 @@ enum BridgeMessageType: String, Decodable {
     case recheckLibraryFolder
     /// `{ channelId? }` — retry every failed download (optionally one channel).
     case retryFailedDownloads
+    /// Settings → About → "Check for Updates…" (Sparkle).
+    case checkForUpdates
 }
 
 struct BridgeMessage: Decodable {

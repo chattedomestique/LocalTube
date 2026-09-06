@@ -333,6 +333,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appState.needsPINSetup  = !PINService.hasPIN()
         appState.refreshLibraryFolderAvailability()
 
+        // Settings → About → "Check for Updates…" goes through Sparkle's
+        // standard updater controller (same as the app-menu item).
+        appState.checkForUpdatesHandler = { [weak self] in
+            self?.updaterController.checkForUpdates(nil)
+        }
+
         // Wire download service event handler → bridge emitter
         appState.downloadService.eventHandler = { [weak self] event in
             guard let self, let windowController = self.windowController,

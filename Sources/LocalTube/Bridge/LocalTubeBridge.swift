@@ -90,6 +90,19 @@ final class LocalTubeBridge: NSObject, WKScriptMessageHandler {
         case .revealLibraryFolder: handleRevealLibraryFolder()
         case .recheckLibraryFolder: handleRecheckLibraryFolder()
         case .retryFailedDownloads: handleRetryFailedDownloads(payloadDict)
+        case .checkForUpdates:      handleCheckForUpdates()
+        }
+    }
+
+    // MARK: - Updates
+
+    private func handleCheckForUpdates() {
+        guard let appState else { return }
+        if let handler = appState.checkForUpdatesHandler {
+            handler()
+        } else {
+            AppLogger.error("checkForUpdates: no updater wired up")
+            emitter.emitToast("Update checking is not available in this build.", kind: "warning")
         }
     }
 

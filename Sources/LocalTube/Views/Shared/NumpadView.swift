@@ -86,8 +86,11 @@ private struct NumpadKeyView: View {
     }
 }
 
-#Preview {
-    NumpadView(digits: .constant("123"))
-        .padding()
-        .background(Color.ltBackground)
+// PreviewProvider, not #Preview: the macro's plugin ships only with Xcode, not the Command Line Tools.
+struct NumpadView_Previews: PreviewProvider {
+    static var previews: some View {
+        NumpadView(digits: .constant("123"))
+            .padding()
+            .background(Color.ltBackground)
+    }
 }

@@ -24,13 +24,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Auto-sync
     //
-    // Source channels are checked for new uploads on launch and once a day
-    // while the app stays open. The 20h staleness guard means relaunching
-    // within the same day won't re-hit YouTube, while the 24h timer keeps a
-    // long-running install current. Retained for the app's lifetime.
-    private static let autoSyncMaxAge:   TimeInterval = 20 * 60 * 60   // 20 hours
-    private static let autoSyncInterval: TimeInterval = 24 * 60 * 60   // daily
-    private var autoSyncTimer: Timer?
+    // Every source channel is checked for new uploads on every launch and at
+    // local midnight while the app stays open. `.NSCalendarDayChanged` fires
+    // at midnight, and once on wake if the Mac slept through it, so there's
+    // no timer to drift. Retained for the app's lifetime.
+    private var dayChangeObserver: NSObjectProtocol?
 
     // MARK: - Library folder watch
     //
@@ -89,18 +87,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             emitter.emitStateUpdate(appState)
 
             if appState.libraryLoadError == nil {
-                await self.startLibraryServices(appState: appState, emitter: emitter)
+                await self.startLibraryServices(appState: appState, emitter: emitter, syncReason: "launch")
             }
-            self.scheduleDailyAutoSync()
+            self.observeMidnight()
         }
     }
 
     /// Everything that needs the library folder: verify files on disk
     /// (healing paths after a move, re-queueing anything that vanished),
-    /// resume downloads left over from the last session, then check
-    /// source channels for new uploads. Skipped — and retried when the
+    /// resume downloads left over from the last session, then check every
+    /// source channel for new uploads. Skipped — and retried when the
     /// folder comes back — if the folder is unreachable.
-    private func startLibraryServices(appState: AppState, emitter: BridgeEventEmitter) async {
+    private func startLibraryServices(appState: AppState, emitter: BridgeEventEmitter, syncReason: String) async {
         guard appState.refreshLibraryFolderAvailability() else {
             AppLogger.error("Library folder unavailable at launch: \(appState.settings.downloadFolderPath ?? "<none>")")
             emitter.emitStateUpdate(appState)
@@ -117,22 +115,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         await appState.downloadService.resumePendingDownloads()
         emitter.emitStateUpdate(appState)
 
-        // Check source channels for new uploads now (launch), then daily.
-        await appState.autoSyncStaleChannels(maxAge: Self.autoSyncMaxAge)
+        await appState.autoSyncSourceChannels(reason: syncReason)
         emitter.emitStateUpdate(appState)
     }
 
-    /// Schedules the once-a-day background check for new uploads. Runs only
-    /// while the app stays open; the launch-time check covers fresh starts.
-    private func scheduleDailyAutoSync() {
-        autoSyncTimer?.invalidate()
-        autoSyncTimer = Timer.scheduledTimer(
-            withTimeInterval: Self.autoSyncInterval, repeats: true
+    /// Checks source channels for new uploads at local midnight while the
+    /// app stays open. If the library folder is gone at that moment, folder
+    /// polling runs the check once it's back.
+    private func observeMidnight() {
+        guard dayChangeObserver == nil else { return }
+        dayChangeObserver = NotificationCenter.default.addObserver(
+            forName: .NSCalendarDayChanged, object: nil, queue: .main
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
-                guard let self, let appState = self.appState else { return }
-                await appState.autoSyncStaleChannels(maxAge: Self.autoSyncMaxAge)
-                self.windowController?.bridge.emitter.emitStateUpdate(appState)
+                guard let self, let appState = self.appState,
+                      let emitter = self.windowController?.bridge.emitter else { return }
+                guard appState.refreshLibraryFolderAvailability() else {
+                    AppLogger.info("Auto-sync (midnight) deferred: library folder unavailable")
+                    emitter.emitStateUpdate(appState)
+                    self.startFolderPolling()
+                    return
+                }
+                await appState.autoSyncSourceChannels(reason: "midnight")
+                emitter.emitStateUpdate(appState)
             }
         }
     }
@@ -150,7 +155,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 if nowAvailable && !wasAvailable {
                     AppLogger.info("Library folder is reachable again — resuming")
                     emitter.emitStateUpdate(appState)
-                    await self.startLibraryServices(appState: appState, emitter: emitter)
+                    await self.startLibraryServices(appState: appState, emitter: emitter, syncReason: "library reconnected")
                 }
             }
         }

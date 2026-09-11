@@ -8,6 +8,19 @@
         <description>LocalTube changelog</description>
         <language>en</language>
         <item>
+            <title>LocalTube 1.0.36</title>
+            <sparkle:version>37</sparkle:version>
+            <sparkle:shortVersionString>1.0.36</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <pubDate>Fri, 11 Sep 2026 16:41:50 +0000</pubDate>
+            <enclosure
+                url="https://github.com/chattedomestique/LocalTube/releases/download/v1.0.36/LocalTube-1.0.36.zip"
+                length="2389550"
+                type="application/octet-stream"
+                sparkle:edSignature="GL+3LwWdGhsfc0Fa0McYSswJD7OIxclMSwCnT3VKaiq+PJlti+VNbF/MniP8F0pgqUn3wen3988HH+jnuQxmDA==" />
+        </item>
+
+        <item>
             <title>LocalTube 1.0.33</title>
             <sparkle:version>34</sparkle:version>
             <sparkle:shortVersionString>1.0.33</sparkle:shortVersionString>
@@ -30,7 +43,8 @@
                 length="1869207"
                 type="application/octet-stream"
                 sparkle:edSignature="rxaMzsjNU0QkqLZkL8NYMO6disiTlLHHSz3Iu2LvbJo6eEpmAf4u0eTWyhUbESwlQBl38rzGaALOKIleM7wyDw==" />
-        </item>        <item>
+        </item>
+        <item>
             <title>LocalTube 1.0.31</title>
             <sparkle:version>32</sparkle:version>
             <sparkle:shortVersionString>1.0.31</sparkle:shortVersionString>
@@ -41,7 +55,8 @@
                 length="1868375"
                 type="application/octet-stream"
                 sparkle:edSignature="TuBEVW57yI4R/eAh6OpTkiZPvTtVBaxVvmBPGvtmIy6wW184zXhLNxMTgpQeYWE+pYOzH8cula6dfUQmiy5fAQ==" />
-        </item>        <item>
+        </item>
+        <item>
             <title>LocalTube 1.0.30</title>
             <sparkle:version>31</sparkle:version>
             <sparkle:shortVersionString>1.0.30</sparkle:shortVersionString>
@@ -52,7 +67,8 @@
                 length="1842112"
                 type="application/octet-stream"
                 sparkle:edSignature="ndegLojl+FuTHKogADFpx7ueh0XaaywLWreDQQlcTU8ltDFdf42EQPTAhjoX/+aBZcgJDDvA66CN0zeAZqxWAA==" />
-        </item>        <item>
+        </item>
+        <item>
             <title>LocalTube 1.0.29</title>
             <sparkle:version>30</sparkle:version>
             <sparkle:shortVersionString>1.0.29</sparkle:shortVersionString>
@@ -63,7 +79,8 @@
                 length="1790749"
                 type="application/octet-stream"
                 sparkle:edSignature="9TCtUIpVHtPcB5/ZV94kV8YPsaWH2vITW1UI7lW90/wTG5eeuAfieFHjkHbF9vjPbBs1Z/K44Pj2UXJwwmMRAw==" />
-        </item>        <item>
+        </item>
+        <item>
             <title>LocalTube 1.0.28</title>
             <sparkle:version>29</sparkle:version>
             <sparkle:shortVersionString>1.0.28</sparkle:shortVersionString>
@@ -74,7 +91,8 @@
                 length="1789596"
                 type="application/octet-stream"
                 sparkle:edSignature="fywi6vzgPrFGWKNmeWWVUAK3jVfD1EYLiNMiw2ZCYfJL1Ac1iPSYqPYADZsvMSqucas1S61+gXkzTYDJN8PsAw==" />
-        </item>        <item>
+        </item>
+        <item>
             <title>LocalTube 1.0.27</title>
             <sparkle:version>28</sparkle:version>
             <sparkle:shortVersionString>1.0.27</sparkle:shortVersionString>
@@ -85,7 +103,8 @@
                 length="1789594"
                 type="application/octet-stream"
                 sparkle:edSignature="OMtaVgEYLakTqSmh2zO9mGUjXKReOEzjerBtUaVuLqYFyqwKnjgDBfKhdNylPP01pLi8mtF/cNSfoyMJR+F6BA==" />
-        </item>        <item>
+        </item>
+        <item>
             <title>LocalTube 1.0.26</title>
             <sparkle:version>27</sparkle:version>
             <sparkle:shortVersionString>1.0.26</sparkle:shortVersionString>
@@ -96,7 +115,8 @@
                 length="1776030"
                 type="application/octet-stream"
                 sparkle:edSignature="90D14Bdnm/WoMm41QJY0Ozvk2kkYf4sdS47PilIVQ/KJWK7LHyDilHpqK64wNWaWRuXXhuZqaH4EebDkxMICCg==" />
-        </item>        <item>
+        </item>
+        <item>
             <title>LocalTube 1.0.25</title>
             <sparkle:version>26</sparkle:version>
             <sparkle:shortVersionString>1.0.25</sparkle:shortVersionString>
@@ -107,7 +127,8 @@
                 length="1775685"
                 type="application/octet-stream"
                 sparkle:edSignature="Guv3UqqPvy4KNy016V5xnA2KYqh1h9rx+xr/gUEP6YH8RiJuOtS8z+M3555h8M4scmclUrpXNFChh82pYXk+CQ==" />
-        </item>        <item>
+        </item>
+        <item>
             <title>LocalTube 1.0.24</title>
             <sparkle:version>25</sparkle:version>
             <sparkle:shortVersionString>1.0.24</sparkle:shortVersionString>
@@ -118,7 +139,8 @@
                 length="1774743"
                 type="application/octet-stream"
                 sparkle:edSignature="6PfemlbQxWj5FclyRhjDVF/QbKkbnaPATzFhvGi0LlOJuCam1aWnAOivDUNbCz5cJY84MN6tWUgx+7TekiPFDw==" />
-        </item>        <item>
+        </item>
+        <item>
             <title>LocalTube 1.0.23</title>
             <sparkle:version>24</sparkle:version>
             <sparkle:shortVersionString>1.0.23</sparkle:shortVersionString>
@@ -129,7 +151,8 @@
                 length="1679835"
                 type="application/octet-stream"
                 sparkle:edSignature="UA9AVC5wixxQs5dx3sS+Y4EDsNf1s+PWZLf5SeHFdJ7xYP+7jqVRf1Rc28WBNJipc7k7apjDzxIm7oERzf+wDg==" />
-        </item>        <item>
+        </item>
+        <item>
             <title>LocalTube 1.0.22</title>
             <sparkle:version>23</sparkle:version>
             <sparkle:shortVersionString>1.0.22</sparkle:shortVersionString>
@@ -140,7 +163,8 @@
                 length="1651322"
                 type="application/octet-stream"
                 sparkle:edSignature="yCKjqnOmDqA1y5lrxc3O82s1SLyLYvGIdE5d5cLwfxQ0ZztplHeUFIAVUvzHqCybgFzlOC9eZKClQ6xr7QqNDA==" />
-        </item>        <item>
+        </item>
+        <item>
             <title>LocalTube 1.0.21</title>
             <sparkle:version>22</sparkle:version>
             <sparkle:shortVersionString>1.0.21</sparkle:shortVersionString>
@@ -151,7 +175,8 @@
                 length="1651325"
                 type="application/octet-stream"
                 sparkle:edSignature="VOgaA0wQiSALtHOTSKteTN1f3pkJ8ruQb72xghhnts0sO9m6DKVwFeP5QEnq1Ip7uF0gvT6AshEpTlpPlhDjDQ==" />
-        </item>        <item>
+        </item>
+        <item>
             <title>LocalTube 1.0.20</title>
             <sparkle:version>21</sparkle:version>
             <sparkle:shortVersionString>1.0.20</sparkle:shortVersionString>
@@ -162,7 +187,8 @@
                 length="1651274"
                 type="application/octet-stream"
                 sparkle:edSignature="5ElFLADgUbhZa9RmZR2r1vwA7t9ewk2K7ZxuE2/RzicELasfFdUvmYotFha5FMLMtsKZsBoZjCcC/EjNRXUrBg==" />
-        </item>        <item>
+        </item>
+        <item>
             <title>LocalTube 1.0.19</title>
             <sparkle:version>20</sparkle:version>
             <sparkle:shortVersionString>1.0.19</sparkle:shortVersionString>
@@ -173,7 +199,8 @@
                 length="1651354"
                 type="application/octet-stream"
                 sparkle:edSignature="1IZH71LDjh8rX1uCS2YwB9OFH2k2Z0WxZjHF0xnmFCubu8ejIqDg3qrYPs+/Wj0u8EQvC5w+ujc9Sw64zzP5DA==" />
-        </item>        <item>
+        </item>
+        <item>
             <title>LocalTube 1.0.18</title>
             <sparkle:version>19</sparkle:version>
             <sparkle:shortVersionString>1.0.18</sparkle:shortVersionString>
@@ -184,7 +211,8 @@
                 length="1651336"
                 type="application/octet-stream"
                 sparkle:edSignature="bSy/qVakDLWMZjHJ4cSFfD0hhW+zD67QfoKPipxc3ZK98i7WTUlvEjwp6xRrd3bT4jQTPRityFcuNi3/vEx3Cw==" />
-        </item>        <item>
+        </item>
+        <item>
             <title>LocalTube 1.0.17</title>
             <sparkle:version>18</sparkle:version>
             <sparkle:shortVersionString>1.0.17</sparkle:shortVersionString>
@@ -195,7 +223,8 @@
                 length="1651437"
                 type="application/octet-stream"
                 sparkle:edSignature="edijK2xK/yJcmKkPuU/uT+S47g9Jzrn6aWYZjwQJraWHVZV3zLBEt/IecTfbcEBxKZISjhOwtFt6eAo0gILHDg==" />
-        </item>        <item>
+        </item>
+        <item>
             <title>LocalTube 1.0.16</title>
             <sparkle:version>17</sparkle:version>
             <sparkle:shortVersionString>1.0.16</sparkle:shortVersionString>
@@ -206,7 +235,8 @@
                 length="1651110"
                 type="application/octet-stream"
                 sparkle:edSignature="QFDDLkdYgQppLUEk/ZzRoE8kLlyzG0GFc47Vh2b3qswYVVNTbksW8zF/7jBIiI/6bQCsPLZkC6kv0SkHrQ57CA==" />
-        </item>        <item>
+        </item>
+        <item>
             <title>LocalTube 1.0.15</title>
             <sparkle:version>16</sparkle:version>
             <sparkle:shortVersionString>1.0.15</sparkle:shortVersionString>
@@ -217,7 +247,8 @@
                 length="1651027"
                 type="application/octet-stream"
                 sparkle:edSignature="i406qBIWs3ug7M2iWx1KYBOaP8VWH30fjkV2zJQlK+m+GBR0yfEYAjfdCU1XHLIOy0u0FuJZXUmtd5uzvCYpBw==" />
-        </item>        <item>
+        </item>
+        <item>
             <title>LocalTube 1.0.14</title>
             <sparkle:version>15</sparkle:version>
             <sparkle:shortVersionString>1.0.14</sparkle:shortVersionString>
@@ -228,7 +259,8 @@
                 length="1650014"
                 type="application/octet-stream"
                 sparkle:edSignature="1gNZgvT6xWS+5Zb/E6yqTPu3t30YePstMQs+CwQKnnumBk5xVyC6d0ZR1HjlubEtz0tgDV7WIOIJoNh9aguHDw==" />
-        </item>        <item>
+        </item>
+        <item>
             <title>LocalTube 1.0.13</title>
             <sparkle:version>14</sparkle:version>
             <sparkle:shortVersionString>1.0.13</sparkle:shortVersionString>
@@ -239,7 +271,8 @@
                 length="1646889"
                 type="application/octet-stream"
                 sparkle:edSignature="Yqc2izuHQSrwlRVYwDV7Cs7J4E4ZT+G8NmTKWUAYhLUczgLQG6TlKByn7LlreU5gMGOz1r5aaHjxUV/GFWWxCA==" />
-        </item>        <item>
+        </item>
+        <item>
             <title>LocalTube 1.0.12</title>
             <sparkle:version>13</sparkle:version>
             <sparkle:shortVersionString>1.0.12</sparkle:shortVersionString>
@@ -250,7 +283,8 @@
                 length="1646098"
                 type="application/octet-stream"
                 sparkle:edSignature="9pllaaiR6rQ0Wme3NIneitEgnZUlDLnU1hcZtBx4dwnJ1yznIuCBPK+FglrBagcO5uNjhzAwd4dfgcbObPjpBA==" />
-        </item>        <item>
+        </item>
+        <item>
             <title>LocalTube 1.0.11</title>
             <sparkle:version>12</sparkle:version>
             <sparkle:shortVersionString>1.0.11</sparkle:shortVersionString>
@@ -261,7 +295,8 @@
                 length="1637631"
                 type="application/octet-stream"
                 sparkle:edSignature="ZjRu3id8Yza86/MQNafApckWnstUCjAT647SIZm6KOR2EZvA0C1D+PedcJh8wKpbwx+EVklRGAjiezbmWL+rCg==" />
-        </item>        <item>
+        </item>
+        <item>
             <title>LocalTube 1.0.10</title>
             <sparkle:version>11</sparkle:version>
             <sparkle:shortVersionString>1.0.10</sparkle:shortVersionString>
@@ -272,7 +307,8 @@
                 length="1632480"
                 type="application/octet-stream"
                 sparkle:edSignature="9VvBTCamefsalSOES6+g0cJsLAHRspq5arv3EOOKHgwotCQCZWJjy5JSbQtzOuAKzN85LgS3yPVTUXrJ/y36BA==" />
-        </item>        <item>
+        </item>
+        <item>
             <title>LocalTube 1.0.9</title>
             <sparkle:version>10</sparkle:version>
             <sparkle:shortVersionString>1.0.9</sparkle:shortVersionString>
@@ -283,7 +319,8 @@
                 length="1632215"
                 type="application/octet-stream"
                 sparkle:edSignature="xnuI1XZ7uDm7h5K19+e+nXYAZWhwBdrgW0iIs0dSxP3QAlbt5H9SSm1atU8p4ykQTrqZ2k4M2XknT/fi0KsxAQ==" />
-        </item>        <item>
+        </item>
+        <item>
             <title>LocalTube 1.0.8</title>
             <sparkle:version>9</sparkle:version>
             <sparkle:shortVersionString>1.0.8</sparkle:shortVersionString>
@@ -294,7 +331,8 @@
                 length="1621771"
                 type="application/octet-stream"
                 sparkle:edSignature="RMD4FCk1/AnK4jOyGZgArzCqh+rrMqhcL7goZXOCUT0IigxiyK5V+RSSmhhm9PVwakH/DATyv+saLwf33HpLAA==" />
-        </item>        <item>
+        </item>
+        <item>
             <title>LocalTube 1.0.5</title>
             <sparkle:version>6</sparkle:version>
             <sparkle:shortVersionString>1.0.5</sparkle:shortVersionString>
@@ -305,7 +343,8 @@
                 length="1586928"
                 type="application/octet-stream"
                 sparkle:edSignature="tlEFjShrwq2DwkqwHDckPP/hUFdq5wOiJbijhKukw1+Vr0Sp4LXvFsTZthxHHzgvyS2cN8r98iRygyCSylCDCw==" />
-        </item>        <item>
+        </item>
+        <item>
             <title>LocalTube 1.0.4</title>
             <sparkle:version>5</sparkle:version>
             <sparkle:shortVersionString>1.0.4</sparkle:shortVersionString>
@@ -316,7 +355,8 @@
                 length="1586853"
                 type="application/octet-stream"
                 sparkle:edSignature="TgOoIfxpGrFeMzgWYT8LGfVYsBVMNqf0XJxz0RA4c9Kqxwx3ERBhCXJKcJRmJCWW4axDoJvS17bpI+UxXYODDg==" />
-        </item>        <item>
+        </item>
+        <item>
             <title>LocalTube 1.0.3</title>
             <sparkle:version>4</sparkle:version>
             <sparkle:shortVersionString>1.0.3</sparkle:shortVersionString>
@@ -327,7 +367,8 @@
                 length="1586853"
                 type="application/octet-stream"
                 sparkle:edSignature="6LfuGazqDjwkHpxs7a3OuIe1s//UF/fMtIb+Yd/m8JBK5f3MZSXnnDYq8LvLJaqnOtJlS1L1Iy3mU8oVGjyCDA==" />
-        </item>        <item>
+        </item>
+        <item>
             <title>LocalTube 1.0.2</title>
             <sparkle:version>3</sparkle:version>
             <sparkle:shortVersionString>1.0.2</sparkle:shortVersionString>
@@ -338,7 +379,8 @@
                 length="1594770"
                 type="application/octet-stream"
                 sparkle:edSignature="placeholder" />
-        </item>        <item>
+        </item>
+        <item>
             <title>LocalTube 1.0.1</title>
             <sparkle:version>2</sparkle:version>
             <sparkle:shortVersionString>1.0.1</sparkle:shortVersionString>

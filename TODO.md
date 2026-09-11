@@ -121,8 +121,9 @@ Right now search only matches `title`. We don't store tags yet.
       assigned channels.
 
 ### Background channel sync [P2]
-- [x] Periodic re-sync of all source channels while the app is open
-      (daily, plus a launch-time check; `AppDelegate.autoSync*`).
+- [x] Re-sync of all source channels on every launch and at local
+      midnight while the app is open (`AppDelegate.observeMidnight`,
+      `AppState.autoSyncSourceChannels`).
 - [ ] Configurable interval.
 - [ ] Manual setting: "Auto-sync interval".
 - [ ] Visible "Last synced" timestamp on each channel card (we already

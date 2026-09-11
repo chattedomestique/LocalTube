@@ -547,29 +547,23 @@ final class AppState {
         return count
     }
 
-    /// Auto-checks source channels for newly uploaded videos. Syncs only
-    /// channels whose last successful sync is older than `maxAge` (or that
-    /// have never synced), one at a time so we never spawn a burst of yt-dlp
-    /// processes. Each `syncChannel` adds just the new videos, enqueues their
-    /// downloads, and posts `.channelSyncStateChanged` so the UI keeps up.
-    /// Driven on launch and on a daily timer (see AppDelegate).
-    func autoSyncStaleChannels(maxAge: TimeInterval) async {
+    /// Checks every source channel for newly uploaded videos, one at a time
+    /// so we never spawn a burst of yt-dlp processes. Each `syncChannel` adds
+    /// just the new videos, enqueues their downloads, and posts
+    /// `.channelSyncStateChanged` so the UI keeps up. Driven on every launch
+    /// and at local midnight (see AppDelegate); `reason` only labels the log.
+    func autoSyncSourceChannels(reason: String) async {
         guard libraryFolderAvailable else {
-            AppLogger.info("Auto-sync skipped: library folder unavailable")
+            AppLogger.info("Auto-sync (\(reason)) skipped: library folder unavailable")
             return
         }
-        let now = Date()
-        let due = channels.filter { ch in
-            guard ch.type == .source, ch.youtubeChannelId?.isEmpty == false else { return false }
-            guard let last = ch.lastSyncedAt else { return true }   // never synced → due
-            return now.timeIntervalSince(last) >= maxAge
-        }
-        guard !due.isEmpty else {
-            AppLogger.info("Auto-sync: no source channels due for refresh")
+        let sources = channels.filter { $0.type == .source && $0.youtubeChannelId?.isEmpty == false }
+        guard !sources.isEmpty else {
+            AppLogger.info("Auto-sync (\(reason)): no source channels")
             return
         }
-        AppLogger.info("Auto-sync: refreshing \(due.count) source channel(s) for new uploads")
-        for channel in due {
+        AppLogger.info("Auto-sync (\(reason)): checking \(sources.count) source channel(s) for new uploads")
+        for channel in sources {
             await syncChannel(channel)
         }
     }

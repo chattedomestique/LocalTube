@@ -74,11 +74,11 @@ if [[ "$DO_SECRET" == "1" ]]; then
   fi
   [[ -s "$KEY_FILE" ]] || die "Exported key file is empty."
 
-  # Sanity check: the exported key must match the public key builds are verified against.
+  # Sanity check: the Keychain key must match the public key builds are verified against (sign_update can't print a public key).
   if [[ -n "${SPARKLE_PUBLIC_KEY:-}" ]]; then
-    DERIVED=$("$SPARKLE_TOOLS_DIR/bin/sign_update" -p --ed-key-file "$KEY_FILE" 2>/dev/null | tr -d '[:space:]' || true)
-    if [[ -n "$DERIVED" && "$DERIVED" != "$SPARKLE_PUBLIC_KEY" ]]; then
-      die "The exported key does not match SPARKLE_PUBLIC_KEY in version.env. Shipping updates signed with it would break every existing install. Aborting."
+    DERIVED=$("$GENERATE_KEYS" -p 2>/dev/null | tr -d '[:space:]' || true)
+    if [[ "$DERIVED" != "$SPARKLE_PUBLIC_KEY" ]]; then
+      die "The Keychain key's public half (${DERIVED:-none}) does not match SPARKLE_PUBLIC_KEY in version.env. Shipping updates signed with it would break every existing install. Aborting."
     fi
   fi
 

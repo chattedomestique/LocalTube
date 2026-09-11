@@ -8,6 +8,19 @@
         <description>LocalTube changelog</description>
         <language>en</language>
         <item>
+            <title>LocalTube 1.0.37</title>
+            <sparkle:version>38</sparkle:version>
+            <sparkle:shortVersionString>1.0.37</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <pubDate>Fri, 11 Sep 2026 17:52:47 +0000</pubDate>
+            <enclosure
+                url="https://github.com/chattedomestique/LocalTube/releases/download/v1.0.37/LocalTube-1.0.37.zip"
+                length="2389881"
+                type="application/octet-stream"
+                sparkle:edSignature="854UMhklibfMWVinKvE4LJWzTdi7tqq6uG1HtGro/7e40KN5Q9uVeH04QhANdlVMMadX6nmGKC4jnMToxON1Aw==" />
+        </item>
+
+        <item>
             <title>LocalTube 1.0.36</title>
             <sparkle:version>37</sparkle:version>
             <sparkle:shortVersionString>1.0.36</sparkle:shortVersionString>
@@ -19,7 +32,6 @@
                 type="application/octet-stream"
                 sparkle:edSignature="GL+3LwWdGhsfc0Fa0McYSswJD7OIxclMSwCnT3VKaiq+PJlti+VNbF/MniP8F0pgqUn3wen3988HH+jnuQxmDA==" />
         </item>
-
         <item>
             <title>LocalTube 1.0.33</title>
             <sparkle:version>34</sparkle:version>

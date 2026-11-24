@@ -1,7 +1,7 @@
 # LocalTube proposed GUI mockups
 
 Source of the design canvas ("LocalTube — Proposed GUI Mockups"). Eight artboards at 1200 x 675 px, which is
-exactly a 1920 x 1080 TV at the proposed `pageZoom` 1.6, drawn with the 1x tokens from `/DESIGN.md`.
+exactly a 1920 x 1080 TV at the proposed `pageZoom` 1.6, drawn with the 1x tokens from `/DESIGN.md` (controls are 10 px rounded rectangles).
 
 | File | Screen |
 |---|---|
@@ -24,6 +24,8 @@ Thumbnails are gradients; the "Nunito" font stands in for SF Rounded (`ui-rounde
 node audit-2026-11/mockups/lint.cjs audit-2026-11/mockups/project
 ```
 
-Needs Playwright. Measures every control and avatar and fails on anything that breaks `/DESIGN.md`:
-heights off the ruler (36/44/56/64/80), controls in a row with different heights, single-line controls that are
-not pills, avatars below 96 px that are not circles. Exit code 1 on any problem.
+Needs Playwright. Measures every control, 28 px badge and `data-avatar` element and fails on anything that breaks
+`/DESIGN.md`: heights off the ruler (36/44/56/64/80), controls in a row with different heights, a control radius other
+than 10 (a container around a control = inner radius + inset), a badge radius other than 10, and avatars that are not
+concentric with their parent (small avatars 6 px; 96 px+ tiles must be 28% squircles, standalone). Exit code 1 on any
+problem.

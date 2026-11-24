@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>First run: get downloads ready</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+button{font-family:inherit}
+</style>
+</helmet>
+<div style="width:1200px;height:675px;box-sizing:border-box;position:relative;overflow:hidden;display:flex;background:#110F0E;color:#F3EDE4;font-family:ui-rounded,'Nunito',system-ui,sans-serif">
+
+  <aside style="width:340px;flex:none;box-sizing:border-box;padding:36px 36px;background:#1A1715;border-right:1px solid rgba(255,240,225,.12);display:flex;flex-direction:column">
+    <div style="display:flex;align-items:center;gap:12px">
+      <div style="width:36px;height:36px;border-radius:10px;background:#B79CFF;color:#1B1033;display:flex;align-items:center;justify-content:center">
+        <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5z" fill="currentColor"/></svg>
+      </div>
+      <span style="font-size:22px;font-weight:800;letter-spacing:-0.005em">LocalTube</span>
+    </div>
+
+    <ol style="list-style:none;margin:56px 0 0;padding:0;display:flex;flex-direction:column;gap:28px">
+      <li style="display:flex;align-items:flex-start;gap:14px">
+        <span style="flex:none;width:32px;height:32px;border-radius:50%;background:#B79CFF;color:#1B1033;font-size:16px;font-weight:800;display:flex;align-items:center;justify-content:center">1</span>
+        <span>
+          <span style="display:block;font-size:16px;font-weight:600;letter-spacing:0.005em;color:#F3EDE4">Get downloads ready</span>
+          <span style="display:block;margin-top:2px;font-size:14px;font-weight:500;color:#C2B8AC">A minute or so</span>
+        </span>
+      </li>
+      <li style="display:flex;align-items:flex-start;gap:14px">
+        <span style="flex:none;width:32px;height:32px;box-sizing:border-box;border-radius:50%;border:2px solid #7A6F64;color:#C2B8AC;font-size:16px;font-weight:700;display:flex;align-items:center;justify-content:center">2</span>
+        <span>
+          <span style="display:block;font-size:16px;font-weight:600;letter-spacing:0.005em;color:#C2B8AC">Who's watching?</span>
+          <span style="display:block;margin-top:2px;font-size:14px;font-weight:500;color:#9A9085">Add a profile for each child</span>
+        </span>
+      </li>
+      <li style="display:flex;align-items:flex-start;gap:14px">
+        <span style="flex:none;width:32px;height:32px;box-sizing:border-box;border-radius:50%;border:2px solid #7A6F64;color:#C2B8AC;font-size:16px;font-weight:700;display:flex;align-items:center;justify-content:center">3</span>
+        <span>
+          <span style="display:block;font-size:16px;font-weight:600;letter-spacing:0.005em;color:#C2B8AC">Add a channel</span>
+          <span style="display:block;margin-top:2px;font-size:14px;font-weight:500;color:#9A9085">Or paste a few video links</span>
+        </span>
+      </li>
+    </ol>
+
+    <p style="margin:auto 0 0;font-size:14px;font-weight:500;line-height:1.5;color:#9A9085">Your library lives in /Users/you/LocalTube. You can move it later in Settings.</p>
+  </aside>
+
+  <main style="flex-grow:1;box-sizing:border-box;padding:56px 64px;display:flex;flex-direction:column">
+    <h1 style="margin:0;font-size:30px;font-weight:700;line-height:1.15;letter-spacing:-0.01em">Let's get downloads ready</h1>
+    <p style="margin:12px 0 0;max-width:560px;font-size:18px;font-weight:400;line-height:1.5;color:#C2B8AC;text-wrap:pretty">LocalTube keeps its own copy of the download tools, so nothing gets installed on your Mac outside this app.</p>
+
+    <ul style="list-style:none;margin:32px 0 0;padding:6px 0;border-radius:18px;background:#231F1C;border:1px solid rgba(255,240,225,.12);box-shadow:inset 0 1px 0 rgba(255,240,225,.04),0 2px 6px rgba(0,0,0,.35)">
+
+      <li style="display:flex;align-items:center;gap:16px;padding:16px 24px;border-bottom:1px solid rgba(255,240,225,.12)">
+        <span style="flex:none;width:40px;height:40px;border-radius:50%;background:rgba(110,219,165,.14);color:#6EDBA5;display:flex;align-items:center;justify-content:center">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+        </span>
+        <span style="flex-grow:1">
+          <span style="display:block;font-size:16px;font-weight:600;letter-spacing:0.005em">Video downloader</span>
+          <span style="display:block;margin-top:2px;font-size:14px;font-weight:500;color:#9A9085">yt-dlp 2026.10.26 · up to date</span>
+        </span>
+        <span style="box-sizing:border-box;display:inline-flex;align-items:center;height:28px;padding:0 10px;border-radius:10px;background:rgba(110,219,165,.14);color:#6EDBA5;font-size:14px;font-weight:600;line-height:1">Ready</span>
+      </li>
+
+      <li style="display:flex;align-items:center;gap:16px;padding:16px 24px;border-bottom:1px solid rgba(255,240,225,.12)">
+        <span style="flex:none;width:40px;height:40px;border-radius:50%;background:rgba(183,156,255,.16);color:#B79CFF;display:flex;align-items:center;justify-content:center">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9" /></svg>
+        </span>
+        <span style="flex-grow:1">
+          <span style="display:block;font-size:16px;font-weight:600;letter-spacing:0.005em">Video tools</span>
+          <span style="display:block;margin-top:2px;font-size:14px;font-weight:500;color:#9A9085">ffmpeg · downloading, 62%</span>
+        </span>
+        <span style="width:180px;height:6px;border-radius:999px;background:rgba(255,240,225,.16);overflow:hidden"><span style="display:block;width:62%;height:100%;background:#B79CFF"></span></span>
+      </li>
+
+      <li style="display:flex;align-items:center;gap:16px;padding:16px 24px">
+        <span style="flex:none;width:40px;height:40px;box-sizing:border-box;border-radius:50%;border:2px solid #7A6F64"></span>
+        <span style="flex-grow:1">
+          <span style="display:block;font-size:16px;font-weight:600;letter-spacing:0.005em">Link reader</span>
+          <span style="display:block;margin-top:2px;font-size:14px;font-weight:500;color:#9A9085">A small helper YouTube links need · waiting</span>
+        </span>
+        <span style="box-sizing:border-box;display:inline-flex;align-items:center;height:28px;padding:0 10px;border-radius:10px;border:1px solid #7A6F64;color:#C2B8AC;font-size:14px;font-weight:600;line-height:1">Waiting</span>
+      </li>
+    </ul>
+
+    <div style="margin-top:auto;display:flex;align-items:center;justify-content:space-between">
+      <span style="font-size:14px;font-weight:500;color:#9A9085">You can re-check these any time in Settings, under Downloads.</span>
+      <div style="display:flex;align-items:center;gap:12px">
+        <button type="button" style="box-sizing:border-box;height:44px;padding:0 20px;border-radius:10px;background:transparent;border:0;color:#C2B8AC;font-size:16px;font-weight:600;line-height:1;cursor:pointer">Skip for now</button>
+        <button type="button" disabled style="box-sizing:border-box;height:44px;padding:0 20px;border-radius:10px;background:#2E2925;border:1px solid rgba(255,240,225,.12);color:#C2B8AC;font-size:16px;font-weight:700;line-height:1">Installing… 62%</button>
+      </div>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1200,"height":675}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

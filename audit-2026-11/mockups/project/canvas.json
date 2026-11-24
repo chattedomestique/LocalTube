@@ -1,0 +1,34 @@
+{
+  "v": 3,
+  "createdOnFiles": { "v": 1, "at": "2026-11-24T00:45:00Z" },
+  "title": "LocalTube — Proposed GUI Mockups",
+  "launch": { "view": "canvas" },
+  "pages": [],
+  "boards": {
+    "Main.dc.html":        { "x": 0,    "y": 0,    "w": 1200, "h": 675, "title": "Who's watching?" },
+    "Library.dc.html":     { "x": 1280, "y": 0,    "w": 1200, "h": 675, "title": "Library" },
+    "Channel.dc.html":     { "x": 2560, "y": 0,    "w": 1200, "h": 675, "title": "Channel" },
+    "Player.dc.html":      { "x": 0,    "y": 1095, "w": 1200, "h": 675, "title": "Player controls on a bright frame" },
+    "PlayerError.dc.html": { "x": 1280, "y": 1095, "w": 1200, "h": 675, "title": "Video can't play" },
+    "Setup.dc.html":       { "x": 0,    "y": 2190, "w": 1200, "h": 675, "title": "First run: get downloads ready" },
+    "AddChannel.dc.html":  { "x": 1280, "y": 2190, "w": 1200, "h": 675, "title": "Add a channel" },
+    "Editing.dc.html":     { "x": 2560, "y": 2190, "w": 1200, "h": 675, "title": "Editing: idle prompt and undo" }
+  },
+  "order": [
+    "Main.dc.html",
+    "Library.dc.html",
+    "Channel.dc.html",
+    "Player.dc.html",
+    "PlayerError.dc.html",
+    "Setup.dc.html",
+    "AddChannel.dc.html",
+    "Editing.dc.html"
+  ],
+  "notes": {
+    "t1": { "x": 0, "y": -300, "text": "Viewer: the couch experience", "kind": "title1", "maxW": 3760 },
+    "s1": { "x": 0, "y": -170, "w": 760, "size": "m", "text": "Each TV screen is drawn at 1200 x 675 px with the proposed 1x type tokens. That is exactly what a 1920 x 1080 TV shows at pageZoom 1.6, so body text here is 29 px on the TV." },
+    "t2": { "x": 0, "y": 795, "text": "Playback: readable on bright video, and a failure that never strands a child", "kind": "title1", "maxW": 2480 },
+    "t3": { "x": 0, "y": 1890, "text": "Grown-ups: first run, adding a channel, safe editing", "kind": "title1", "maxW": 3760 }
+  },
+  "designSystems": []
+}
